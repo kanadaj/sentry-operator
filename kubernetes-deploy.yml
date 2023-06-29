@@ -1,0 +1,2641 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: geoipupdate
+    app.kubernetes.io/instance: geoipupdate
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: geoipupdate
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: geoipupdate
+      app.kubernetes.io/instance: geoipupdate
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: geoipupdate
+        app.kubernetes.io/instance: geoipupdate
+    spec:
+      containers:
+      - args:
+        - pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh
+        command:
+        - /bin/bash
+        - -c
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: maxmindinc/geoipupdate:v4.7.1
+        name: geoipupdate
+        resources:
+          limits:
+            cpu: 100m
+            memory: 500Mi
+        volumeMounts:
+        - mountPath: /sentry
+          name: geoip
+      volumes:
+      - name: geoip
+        persistentVolumeClaim:
+          claimName: geoip
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: snuba-api
+    app.kubernetes.io/instance: snuba-api
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: snuba-api
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: snuba-api
+      app.kubernetes.io/instance: snuba-api
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: snuba-api
+        app.kubernetes.io/instance: snuba-api
+    spec:
+      containers:
+      - args: []
+        command:
+        - /bin/bash
+        - -c
+        env:
+        - name: SNUBA_SETTINGS
+          value: self_hosted
+        - name: CLICKHOUSE_HOST
+          value: clickhouse
+        - name: DEFAULT_BROKERS
+          value: kafka:9092
+        - name: REDIS_HOST
+          value: redis
+        - name: UWSGI_MAX_REQUESTS
+          value: "10000"
+        - name: UWSGI_DISABLE_LOGGING
+          value: "true"
+        - name: SENTRY_EVENT_RETENTION_DAYS
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: getsentry/snuba:nightly
+        name: snuba-api
+        resources:
+          limits:
+            cpu: 50m
+            memory: 200Mi
+          requests:
+            cpu: 25m
+            memory: 110Mi
+        volumeMounts:
+        - mountPath: /data
+          name: sentry-data
+        - mountPath: /etc/sentry/sentry.conf.py
+          name: sentry-config
+          subPath: sentry.conf.py
+        - mountPath: /etc/sentry/requirements.txt
+          name: sentry-config
+          subPath: requirements.txt
+        - mountPath: /etc/sentry/config.yml
+          name: sentry-config
+          subPath: config.yml
+      volumes:
+      - name: sentry-config
+        secret:
+          defaultMode: 420
+          optional: false
+          secretName: sentry-config
+      - name: sentry-data
+        persistentVolumeClaim:
+          claimName: sentry-data
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: snuba-consumer
+    app.kubernetes.io/instance: snuba-consumer
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: snuba-consumer
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: snuba-consumer
+      app.kubernetes.io/instance: snuba-consumer
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: snuba-consumer
+        app.kubernetes.io/instance: snuba-consumer
+    spec:
+      containers:
+      - args:
+        - consumer --storage errors --auto-offset-reset=latest --max-batch-time-ms 750 --no-strict-offset-reset
+        command:
+        - /bin/bash
+        - -c
+        env:
+        - name: SNUBA_SETTINGS
+          value: self_hosted
+        - name: CLICKHOUSE_HOST
+          value: clickhouse
+        - name: DEFAULT_BROKERS
+          value: kafka:9092
+        - name: REDIS_HOST
+          value: redis
+        - name: UWSGI_MAX_REQUESTS
+          value: "10000"
+        - name: UWSGI_DISABLE_LOGGING
+          value: "true"
+        - name: SENTRY_EVENT_RETENTION_DAYS
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: getsentry/snuba:nightly
+        name: snuba-consumer
+        resources:
+          limits:
+            cpu: 50m
+            memory: 500Mi
+          requests:
+            cpu: 10m
+            memory: 200Mi
+        volumeMounts:
+        - mountPath: /data
+          name: sentry-data
+        - mountPath: /etc/sentry/sentry.conf.py
+          name: sentry-config
+          subPath: sentry.conf.py
+        - mountPath: /etc/sentry/requirements.txt
+          name: sentry-config
+          subPath: requirements.txt
+        - mountPath: /etc/sentry/config.yml
+          name: sentry-config
+          subPath: config.yml
+      volumes:
+      - name: sentry-config
+        secret:
+          defaultMode: 420
+          optional: false
+          secretName: sentry-config
+      - name: sentry-data
+        persistentVolumeClaim:
+          claimName: sentry-data
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: snuba-outcomes-consumer
+    app.kubernetes.io/instance: snuba-outcomes-consumer
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: snuba-outcomes-consumer
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: snuba-outcomes-consumer
+      app.kubernetes.io/instance: snuba-outcomes-consumer
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: snuba-outcomes-consumer
+        app.kubernetes.io/instance: snuba-outcomes-consumer
+    spec:
+      containers:
+      - args:
+        - consumer --storage outcomes_raw --auto-offset-reset=earliest --max-batch-time-ms 750 --no-strict-offset-reset
+        command:
+        - /bin/bash
+        - -c
+        env:
+        - name: SNUBA_SETTINGS
+          value: self_hosted
+        - name: CLICKHOUSE_HOST
+          value: clickhouse
+        - name: DEFAULT_BROKERS
+          value: kafka:9092
+        - name: REDIS_HOST
+          value: redis
+        - name: UWSGI_MAX_REQUESTS
+          value: "10000"
+        - name: UWSGI_DISABLE_LOGGING
+          value: "true"
+        - name: SENTRY_EVENT_RETENTION_DAYS
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: getsentry/snuba:nightly
+        name: snuba-outcomes-consumer
+        resources:
+          limits:
+            cpu: 50m
+            memory: 500Mi
+          requests:
+            cpu: 10m
+            memory: 200Mi
+        volumeMounts:
+        - mountPath: /data
+          name: sentry-data
+        - mountPath: /etc/sentry/sentry.conf.py
+          name: sentry-config
+          subPath: sentry.conf.py
+        - mountPath: /etc/sentry/requirements.txt
+          name: sentry-config
+          subPath: requirements.txt
+        - mountPath: /etc/sentry/config.yml
+          name: sentry-config
+          subPath: config.yml
+      volumes:
+      - name: sentry-config
+        secret:
+          defaultMode: 420
+          optional: false
+          secretName: sentry-config
+      - name: sentry-data
+        persistentVolumeClaim:
+          claimName: sentry-data
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: snuba-sessions-consumer
+    app.kubernetes.io/instance: snuba-sessions-consumer
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: snuba-sessions-consumer
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: snuba-sessions-consumer
+      app.kubernetes.io/instance: snuba-sessions-consumer
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: snuba-sessions-consumer
+        app.kubernetes.io/instance: snuba-sessions-consumer
+    spec:
+      containers:
+      - args:
+        - consumer --storage sessions_raw --auto-offset-reset=latest --max-batch-time-ms 750 --no-strict-offset-reset
+        command:
+        - /bin/bash
+        - -c
+        env:
+        - name: SNUBA_SETTINGS
+          value: self_hosted
+        - name: CLICKHOUSE_HOST
+          value: clickhouse
+        - name: DEFAULT_BROKERS
+          value: kafka:9092
+        - name: REDIS_HOST
+          value: redis
+        - name: UWSGI_MAX_REQUESTS
+          value: "10000"
+        - name: UWSGI_DISABLE_LOGGING
+          value: "true"
+        - name: SENTRY_EVENT_RETENTION_DAYS
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: getsentry/snuba:nightly
+        name: snuba-sessions-consumer
+        resources:
+          limits:
+            cpu: 50m
+            memory: 500Mi
+          requests:
+            cpu: 10m
+            memory: 200Mi
+        volumeMounts:
+        - mountPath: /data
+          name: sentry-data
+        - mountPath: /etc/sentry/sentry.conf.py
+          name: sentry-config
+          subPath: sentry.conf.py
+        - mountPath: /etc/sentry/requirements.txt
+          name: sentry-config
+          subPath: requirements.txt
+        - mountPath: /etc/sentry/config.yml
+          name: sentry-config
+          subPath: config.yml
+      volumes:
+      - name: sentry-config
+        secret:
+          defaultMode: 420
+          optional: false
+          secretName: sentry-config
+      - name: sentry-data
+        persistentVolumeClaim:
+          claimName: sentry-data
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: snuba-transactions-consumer
+    app.kubernetes.io/instance: snuba-transactions-consumer
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: snuba-transactions-consumer
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: snuba-transactions-consumer
+      app.kubernetes.io/instance: snuba-transactions-consumer
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: snuba-transactions-consumer
+        app.kubernetes.io/instance: snuba-transactions-consumer
+    spec:
+      containers:
+      - args:
+        - consumer --storage transactions --consumer-group transactions_group --auto-offset-reset=latest --max-batch-time-ms 750 --no-strict-offset-reset
+        command:
+        - /bin/bash
+        - -c
+        env:
+        - name: SNUBA_SETTINGS
+          value: self_hosted
+        - name: CLICKHOUSE_HOST
+          value: clickhouse
+        - name: DEFAULT_BROKERS
+          value: kafka:9092
+        - name: REDIS_HOST
+          value: redis
+        - name: UWSGI_MAX_REQUESTS
+          value: "10000"
+        - name: UWSGI_DISABLE_LOGGING
+          value: "true"
+        - name: SENTRY_EVENT_RETENTION_DAYS
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: getsentry/snuba:nightly
+        name: snuba-transactions-consumer
+        resources:
+          limits:
+            cpu: 50m
+            memory: 500Mi
+          requests:
+            cpu: 10m
+            memory: 200Mi
+        volumeMounts:
+        - mountPath: /data
+          name: sentry-data
+        - mountPath: /etc/sentry/sentry.conf.py
+          name: sentry-config
+          subPath: sentry.conf.py
+        - mountPath: /etc/sentry/requirements.txt
+          name: sentry-config
+          subPath: requirements.txt
+        - mountPath: /etc/sentry/config.yml
+          name: sentry-config
+          subPath: config.yml
+      volumes:
+      - name: sentry-config
+        secret:
+          defaultMode: 420
+          optional: false
+          secretName: sentry-config
+      - name: sentry-data
+        persistentVolumeClaim:
+          claimName: sentry-data
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: snuba-replays-consumer
+    app.kubernetes.io/instance: snuba-replays-consumer
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: snuba-replays-consumer
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: snuba-replays-consumer
+      app.kubernetes.io/instance: snuba-replays-consumer
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: snuba-replays-consumer
+        app.kubernetes.io/instance: snuba-replays-consumer
+    spec:
+      containers:
+      - args:
+        - consumer --storage replays --auto-offset-reset=latest --max-batch-time-ms 750 --no-strict-offset-reset
+        command:
+        - /bin/bash
+        - -c
+        env:
+        - name: SNUBA_SETTINGS
+          value: self_hosted
+        - name: CLICKHOUSE_HOST
+          value: clickhouse
+        - name: DEFAULT_BROKERS
+          value: kafka:9092
+        - name: REDIS_HOST
+          value: redis
+        - name: UWSGI_MAX_REQUESTS
+          value: "10000"
+        - name: UWSGI_DISABLE_LOGGING
+          value: "true"
+        - name: SENTRY_EVENT_RETENTION_DAYS
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: getsentry/snuba:nightly
+        name: snuba-replays-consumer
+        resources:
+          limits:
+            cpu: 50m
+            memory: 500Mi
+          requests:
+            cpu: 10m
+            memory: 200Mi
+        volumeMounts:
+        - mountPath: /data
+          name: sentry-data
+        - mountPath: /etc/sentry/sentry.conf.py
+          name: sentry-config
+          subPath: sentry.conf.py
+        - mountPath: /etc/sentry/requirements.txt
+          name: sentry-config
+          subPath: requirements.txt
+        - mountPath: /etc/sentry/config.yml
+          name: sentry-config
+          subPath: config.yml
+      volumes:
+      - name: sentry-config
+        secret:
+          defaultMode: 420
+          optional: false
+          secretName: sentry-config
+      - name: sentry-data
+        persistentVolumeClaim:
+          claimName: sentry-data
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: snuba-replacer
+    app.kubernetes.io/instance: snuba-replacer
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: snuba-replacer
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: snuba-replacer
+      app.kubernetes.io/instance: snuba-replacer
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: snuba-replacer
+        app.kubernetes.io/instance: snuba-replacer
+    spec:
+      containers:
+      - args:
+        - replacer --storage errors --auto-offset-reset=latest --no-strict-offset-reset
+        command:
+        - /bin/bash
+        - -c
+        env:
+        - name: SNUBA_SETTINGS
+          value: self_hosted
+        - name: CLICKHOUSE_HOST
+          value: clickhouse
+        - name: DEFAULT_BROKERS
+          value: kafka:9092
+        - name: REDIS_HOST
+          value: redis
+        - name: UWSGI_MAX_REQUESTS
+          value: "10000"
+        - name: UWSGI_DISABLE_LOGGING
+          value: "true"
+        - name: SENTRY_EVENT_RETENTION_DAYS
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: getsentry/snuba:nightly
+        name: snuba-replacer
+        resources:
+          limits:
+            cpu: 100m
+            memory: 500Mi
+          requests:
+            cpu: 10m
+            memory: 200Mi
+        volumeMounts:
+        - mountPath: /data
+          name: sentry-data
+        - mountPath: /etc/sentry/sentry.conf.py
+          name: sentry-config
+          subPath: sentry.conf.py
+        - mountPath: /etc/sentry/requirements.txt
+          name: sentry-config
+          subPath: requirements.txt
+        - mountPath: /etc/sentry/config.yml
+          name: sentry-config
+          subPath: config.yml
+      volumes:
+      - name: sentry-config
+        secret:
+          defaultMode: 420
+          optional: false
+          secretName: sentry-config
+      - name: sentry-data
+        persistentVolumeClaim:
+          claimName: sentry-data
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: snuba-subscription-consumer-events
+    app.kubernetes.io/instance: snuba-subscription-consumer-events
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: snuba-subscription-consumer-events
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: snuba-subscription-consumer-events
+      app.kubernetes.io/instance: snuba-subscription-consumer-events
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: snuba-subscription-consumer-events
+        app.kubernetes.io/instance: snuba-subscription-consumer-events
+    spec:
+      containers:
+      - args:
+        - subscriptions-scheduler-executor --dataset events --entity events --auto-offset-reset=latest --no-strict-offset-reset --consumer-group=snuba-events-subscriptions-consumers --followed-consumer-group=snuba-consumers --delay-seconds=60 --schedule-ttl=60 --stale-threshold-seconds=900
+        command:
+        - /bin/bash
+        - -c
+        env:
+        - name: SNUBA_SETTINGS
+          value: self_hosted
+        - name: CLICKHOUSE_HOST
+          value: clickhouse
+        - name: DEFAULT_BROKERS
+          value: kafka:9092
+        - name: REDIS_HOST
+          value: redis
+        - name: UWSGI_MAX_REQUESTS
+          value: "10000"
+        - name: UWSGI_DISABLE_LOGGING
+          value: "true"
+        - name: SENTRY_EVENT_RETENTION_DAYS
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: getsentry/snuba:nightly
+        name: snuba-subscription-consumer-events
+        resources:
+          limits:
+            cpu: 50m
+            memory: 500Mi
+          requests:
+            cpu: 10m
+            memory: 200Mi
+        volumeMounts:
+        - mountPath: /data
+          name: sentry-data
+        - mountPath: /etc/sentry/sentry.conf.py
+          name: sentry-config
+          subPath: sentry.conf.py
+        - mountPath: /etc/sentry/requirements.txt
+          name: sentry-config
+          subPath: requirements.txt
+        - mountPath: /etc/sentry/config.yml
+          name: sentry-config
+          subPath: config.yml
+      volumes:
+      - name: sentry-config
+        secret:
+          defaultMode: 420
+          optional: false
+          secretName: sentry-config
+      - name: sentry-data
+        persistentVolumeClaim:
+          claimName: sentry-data
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: snuba-subscription-consumer-sessions
+    app.kubernetes.io/instance: snuba-subscription-consumer-sessions
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: snuba-subscription-consumer-sessions
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: snuba-subscription-consumer-sessions
+      app.kubernetes.io/instance: snuba-subscription-consumer-sessions
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: snuba-subscription-consumer-sessions
+        app.kubernetes.io/instance: snuba-subscription-consumer-sessions
+    spec:
+      containers:
+      - args:
+        - subscriptions-scheduler-executor --dataset sessions --entity sessions --auto-offset-reset=latest --no-strict-offset-reset --consumer-group=snuba-sessions-subscriptions-consumers --followed-consumer-group=sessions-group --delay-seconds=60 --schedule-ttl=60 --stale-threshold-seconds=900
+        command:
+        - /bin/bash
+        - -c
+        env:
+        - name: SNUBA_SETTINGS
+          value: self_hosted
+        - name: CLICKHOUSE_HOST
+          value: clickhouse
+        - name: DEFAULT_BROKERS
+          value: kafka:9092
+        - name: REDIS_HOST
+          value: redis
+        - name: UWSGI_MAX_REQUESTS
+          value: "10000"
+        - name: UWSGI_DISABLE_LOGGING
+          value: "true"
+        - name: SENTRY_EVENT_RETENTION_DAYS
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: getsentry/snuba:nightly
+        name: snuba-subscription-consumer-sessions
+        resources:
+          limits:
+            cpu: 50m
+            memory: 500Mi
+          requests:
+            cpu: 10m
+            memory: 200Mi
+        volumeMounts:
+        - mountPath: /data
+          name: sentry-data
+        - mountPath: /etc/sentry/sentry.conf.py
+          name: sentry-config
+          subPath: sentry.conf.py
+        - mountPath: /etc/sentry/requirements.txt
+          name: sentry-config
+          subPath: requirements.txt
+        - mountPath: /etc/sentry/config.yml
+          name: sentry-config
+          subPath: config.yml
+      volumes:
+      - name: sentry-config
+        secret:
+          defaultMode: 420
+          optional: false
+          secretName: sentry-config
+      - name: sentry-data
+        persistentVolumeClaim:
+          claimName: sentry-data
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: snuba-subscription-consumer-transactions
+    app.kubernetes.io/instance: snuba-subscription-consumer-transactions
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: snuba-subscription-consumer-transactions
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: snuba-subscription-consumer-transactions
+      app.kubernetes.io/instance: snuba-subscription-consumer-transactions
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: snuba-subscription-consumer-transactions
+        app.kubernetes.io/instance: snuba-subscription-consumer-transactions
+    spec:
+      containers:
+      - args:
+        - subscriptions-scheduler-executor --dataset transactions --entity transactions --auto-offset-reset=latest --no-strict-offset-reset --consumer-group=snuba-transactions-subscriptions-consumers --followed-consumer-group=transactions_group --delay-seconds=60 --schedule-ttl=60 --stale-threshold-seconds=900
+        command:
+        - /bin/bash
+        - -c
+        env:
+        - name: SNUBA_SETTINGS
+          value: self_hosted
+        - name: CLICKHOUSE_HOST
+          value: clickhouse
+        - name: DEFAULT_BROKERS
+          value: kafka:9092
+        - name: REDIS_HOST
+          value: redis
+        - name: UWSGI_MAX_REQUESTS
+          value: "10000"
+        - name: UWSGI_DISABLE_LOGGING
+          value: "true"
+        - name: SENTRY_EVENT_RETENTION_DAYS
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: getsentry/snuba:nightly
+        name: snuba-subscription-consumer-transactions
+        resources:
+          limits:
+            cpu: 50m
+            memory: 500Mi
+          requests:
+            cpu: 10m
+            memory: 200Mi
+        volumeMounts:
+        - mountPath: /data
+          name: sentry-data
+        - mountPath: /etc/sentry/sentry.conf.py
+          name: sentry-config
+          subPath: sentry.conf.py
+        - mountPath: /etc/sentry/requirements.txt
+          name: sentry-config
+          subPath: requirements.txt
+        - mountPath: /etc/sentry/config.yml
+          name: sentry-config
+          subPath: config.yml
+      volumes:
+      - name: sentry-config
+        secret:
+          defaultMode: 420
+          optional: false
+          secretName: sentry-config
+      - name: sentry-data
+        persistentVolumeClaim:
+          claimName: sentry-data
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: snuba-profiling-profiles-consumer
+    app.kubernetes.io/instance: snuba-profiling-profiles-consumer
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: snuba-profiling-profiles-consumer
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: snuba-profiling-profiles-consumer
+      app.kubernetes.io/instance: snuba-profiling-profiles-consumer
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: snuba-profiling-profiles-consumer
+        app.kubernetes.io/instance: snuba-profiling-profiles-consumer
+    spec:
+      containers:
+      - args:
+        - consumer --storage profiles --auto-offset-reset=latest --max-batch-time-ms 1000 --no-strict-offset-reset
+        command:
+        - /bin/bash
+        - -c
+        env:
+        - name: SNUBA_SETTINGS
+          value: self_hosted
+        - name: CLICKHOUSE_HOST
+          value: clickhouse
+        - name: DEFAULT_BROKERS
+          value: kafka:9092
+        - name: REDIS_HOST
+          value: redis
+        - name: UWSGI_MAX_REQUESTS
+          value: "10000"
+        - name: UWSGI_DISABLE_LOGGING
+          value: "true"
+        - name: SENTRY_EVENT_RETENTION_DAYS
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: getsentry/snuba:nightly
+        name: snuba-profiling-profiles-consumer
+        resources:
+          limits:
+            cpu: 50m
+            memory: 500Mi
+          requests:
+            cpu: 10m
+            memory: 200Mi
+        volumeMounts:
+        - mountPath: /data
+          name: sentry-data
+        - mountPath: /etc/sentry/sentry.conf.py
+          name: sentry-config
+          subPath: sentry.conf.py
+        - mountPath: /etc/sentry/requirements.txt
+          name: sentry-config
+          subPath: requirements.txt
+        - mountPath: /etc/sentry/config.yml
+          name: sentry-config
+          subPath: config.yml
+      volumes:
+      - name: sentry-config
+        secret:
+          defaultMode: 420
+          optional: false
+          secretName: sentry-config
+      - name: sentry-data
+        persistentVolumeClaim:
+          claimName: sentry-data
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: snuba-profiling-functions-consumer
+    app.kubernetes.io/instance: snuba-profiling-functions-consumer
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: snuba-profiling-functions-consumer
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: snuba-profiling-functions-consumer
+      app.kubernetes.io/instance: snuba-profiling-functions-consumer
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: snuba-profiling-functions-consumer
+        app.kubernetes.io/instance: snuba-profiling-functions-consumer
+    spec:
+      containers:
+      - args:
+        - consumer --storage functions_raw --auto-offset-reset=latest --max-batch-time-ms 1000 --no-strict-offset-reset
+        command:
+        - /bin/bash
+        - -c
+        env:
+        - name: SNUBA_SETTINGS
+          value: self_hosted
+        - name: CLICKHOUSE_HOST
+          value: clickhouse
+        - name: DEFAULT_BROKERS
+          value: kafka:9092
+        - name: REDIS_HOST
+          value: redis
+        - name: UWSGI_MAX_REQUESTS
+          value: "10000"
+        - name: UWSGI_DISABLE_LOGGING
+          value: "true"
+        - name: SENTRY_EVENT_RETENTION_DAYS
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: getsentry/snuba:nightly
+        name: snuba-profiling-functions-consumer
+        resources:
+          limits:
+            cpu: 50m
+            memory: 500Mi
+          requests:
+            cpu: 10m
+            memory: 200Mi
+        volumeMounts:
+        - mountPath: /data
+          name: sentry-data
+        - mountPath: /etc/sentry/sentry.conf.py
+          name: sentry-config
+          subPath: sentry.conf.py
+        - mountPath: /etc/sentry/requirements.txt
+          name: sentry-config
+          subPath: requirements.txt
+        - mountPath: /etc/sentry/config.yml
+          name: sentry-config
+          subPath: config.yml
+      volumes:
+      - name: sentry-config
+        secret:
+          defaultMode: 420
+          optional: false
+          secretName: sentry-config
+      - name: sentry-data
+        persistentVolumeClaim:
+          claimName: sentry-data
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: symbolicator
+    app.kubernetes.io/instance: symbolicator
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: symbolicator
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: symbolicator
+      app.kubernetes.io/instance: symbolicator
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: symbolicator
+        app.kubernetes.io/instance: symbolicator
+    spec:
+      containers:
+      - args:
+        - pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh
+        - run -c /etc/symbolicator/config.yml
+        command:
+        - /bin/bash
+        - -c
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: getsentry/symbolicator:nightly
+        name: symbolicator
+        resources: {}
+        volumeMounts:
+        - mountPath: /data
+          name: sentry-symbolicator
+        - mountPath: /etc/sentry/sentry.conf.py
+          name: sentry-config
+          subPath: sentry.conf.py
+        - mountPath: /etc/sentry/requirements.txt
+          name: sentry-config
+          subPath: requirements.txt
+        - mountPath: /etc/sentry/config.yml
+          name: sentry-config
+          subPath: config.yml
+      volumes:
+      - name: sentry-symbolicator
+        persistentVolumeClaim:
+          claimName: sentry-symbolicator
+      - name: sentry-config
+        secret:
+          defaultMode: 420
+          optional: false
+          secretName: sentry-config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: symbolicator-cleanup
+    app.kubernetes.io/instance: symbolicator-cleanup
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: symbolicator-cleanup
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: symbolicator-cleanup
+      app.kubernetes.io/instance: symbolicator-cleanup
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: symbolicator-cleanup
+        app.kubernetes.io/instance: symbolicator-cleanup
+    spec:
+      containers:
+      - args:
+        - pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh
+        - '"55 23 * * * gosu symbolicator symbolicator cleanup"'
+        command:
+        - /bin/bash
+        - -c
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: symbolicator-cleanup-self-hosted-local
+        name: symbolicator-cleanup
+        resources: {}
+        volumeMounts:
+        - mountPath: /data
+          name: sentry-symbolicator
+      volumes:
+      - name: sentry-symbolicator
+        persistentVolumeClaim:
+          claimName: sentry-symbolicator
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: web
+    app.kubernetes.io/instance: web
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: web
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: web
+      app.kubernetes.io/instance: web
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: web
+        app.kubernetes.io/instance: web
+    spec:
+      containers:
+      - args:
+        - pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh
+        command:
+        - /bin/bash
+        - -c
+        env:
+        - name: PYTHONUSERBASE
+          value: /data/custom-packages
+        - name: SENTRY_CONF
+          value: /etc/sentry
+        - name: SNUBA
+          value: http://snuba-api:1218
+        - name: VROOM
+          value: http://vroom:8085
+        - name: DEFAULT_CA_BUNDLE
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: REQUESTS_CA_BUNDLE
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: SENTRY_EVENT_RETENTION_DAYS
+        - name: SENTRY_MAIL_HOST
+        - name: SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE
+        - name: OPENAI_API_KEY
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: getsentry/sentry:nightly
+        livenessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - 'exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e "GET /_health/ HTTP/1.1\r\nhost: 127.0.0.1\r\n\r\n" >&3 && grep ok -s -m 1 <&3'
+          failureThreshold: 10
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 60
+        name: web
+        readinessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - 'exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e "GET /_health/ HTTP/1.1\r\nhost: 127.0.0.1\r\n\r\n" >&3 && grep ok -s -m 1 <&3'
+          failureThreshold: 10
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 60
+        resources: {}
+        volumeMounts:
+        - mountPath: /data
+          name: sentry-data
+        - mountPath: /geoip
+          name: geoip
+        - mountPath: /usr/local/share/ca-certificates
+          name: certificates
+        - mountPath: /etc/sentry/sentry.conf.py
+          name: sentry-config
+          subPath: sentry.conf.py
+        - mountPath: /etc/sentry/requirements.txt
+          name: sentry-config
+          subPath: requirements.txt
+        - mountPath: /etc/sentry/config.yml
+          name: sentry-config
+          subPath: config.yml
+      volumes:
+      - name: sentry-data
+        persistentVolumeClaim:
+          claimName: sentry-data
+      - name: geoip
+        persistentVolumeClaim:
+          claimName: geoip
+      - name: certificates
+        secret:
+          defaultMode: 420
+          secretName: sentry-certificates
+      - name: sentry-config
+        secret:
+          defaultMode: 420
+          optional: false
+          secretName: sentry-config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: cron
+    app.kubernetes.io/instance: cron
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: cron
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cron
+      app.kubernetes.io/instance: cron
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cron
+        app.kubernetes.io/instance: cron
+    spec:
+      containers:
+      - args:
+        - pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh
+        - run cron
+        command:
+        - /bin/bash
+        - -c
+        env:
+        - name: PYTHONUSERBASE
+          value: /data/custom-packages
+        - name: SENTRY_CONF
+          value: /etc/sentry
+        - name: SNUBA
+          value: http://snuba-api:1218
+        - name: VROOM
+          value: http://vroom:8085
+        - name: DEFAULT_CA_BUNDLE
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: REQUESTS_CA_BUNDLE
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: SENTRY_EVENT_RETENTION_DAYS
+        - name: SENTRY_MAIL_HOST
+        - name: SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE
+        - name: OPENAI_API_KEY
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: getsentry/sentry:nightly
+        name: cron
+        resources:
+          limits:
+            cpu: 50m
+            memory: 1Gi
+          requests:
+            cpu: 25m
+            memory: 250Mi
+        volumeMounts:
+        - mountPath: /data
+          name: sentry-data
+        - mountPath: /geoip
+          name: geoip
+        - mountPath: /usr/local/share/ca-certificates
+          name: certificates
+        - mountPath: /etc/sentry/sentry.conf.py
+          name: sentry-config
+          subPath: sentry.conf.py
+        - mountPath: /etc/sentry/requirements.txt
+          name: sentry-config
+          subPath: requirements.txt
+        - mountPath: /etc/sentry/config.yml
+          name: sentry-config
+          subPath: config.yml
+      volumes:
+      - name: sentry-data
+        persistentVolumeClaim:
+          claimName: sentry-data
+      - name: geoip
+        persistentVolumeClaim:
+          claimName: geoip
+      - name: certificates
+        secret:
+          defaultMode: 420
+          secretName: sentry-certificates
+      - name: sentry-config
+        secret:
+          defaultMode: 420
+          optional: false
+          secretName: sentry-config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: worker
+    app.kubernetes.io/instance: worker
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: worker
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: worker
+      app.kubernetes.io/instance: worker
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: worker
+        app.kubernetes.io/instance: worker
+    spec:
+      containers:
+      - args:
+        - pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh
+        - run worker
+        command:
+        - /bin/bash
+        - -c
+        env:
+        - name: PYTHONUSERBASE
+          value: /data/custom-packages
+        - name: SENTRY_CONF
+          value: /etc/sentry
+        - name: SNUBA
+          value: http://snuba-api:1218
+        - name: VROOM
+          value: http://vroom:8085
+        - name: DEFAULT_CA_BUNDLE
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: REQUESTS_CA_BUNDLE
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: SENTRY_EVENT_RETENTION_DAYS
+        - name: SENTRY_MAIL_HOST
+        - name: SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE
+        - name: OPENAI_API_KEY
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: getsentry/sentry:nightly
+        name: worker
+        resources:
+          limits:
+            cpu: 200m
+            memory: 2560Mi
+          requests:
+            cpu: 100m
+            memory: 2Gi
+        volumeMounts:
+        - mountPath: /data
+          name: sentry-data
+        - mountPath: /geoip
+          name: geoip
+        - mountPath: /usr/local/share/ca-certificates
+          name: certificates
+        - mountPath: /etc/sentry/sentry.conf.py
+          name: sentry-config
+          subPath: sentry.conf.py
+        - mountPath: /etc/sentry/requirements.txt
+          name: sentry-config
+          subPath: requirements.txt
+        - mountPath: /etc/sentry/config.yml
+          name: sentry-config
+          subPath: config.yml
+      volumes:
+      - name: sentry-data
+        persistentVolumeClaim:
+          claimName: sentry-data
+      - name: geoip
+        persistentVolumeClaim:
+          claimName: geoip
+      - name: certificates
+        secret:
+          defaultMode: 420
+          secretName: sentry-certificates
+      - name: sentry-config
+        secret:
+          defaultMode: 420
+          optional: false
+          secretName: sentry-config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: events-consumer
+    app.kubernetes.io/instance: events-consumer
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: events-consumer
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: events-consumer
+      app.kubernetes.io/instance: events-consumer
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: events-consumer
+        app.kubernetes.io/instance: events-consumer
+    spec:
+      containers:
+      - args:
+        - pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh
+        - run consumer ingest-events --consumer-group ingest-consumer
+        command:
+        - /bin/bash
+        - -c
+        env:
+        - name: PYTHONUSERBASE
+          value: /data/custom-packages
+        - name: SENTRY_CONF
+          value: /etc/sentry
+        - name: SNUBA
+          value: http://snuba-api:1218
+        - name: VROOM
+          value: http://vroom:8085
+        - name: DEFAULT_CA_BUNDLE
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: REQUESTS_CA_BUNDLE
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: SENTRY_EVENT_RETENTION_DAYS
+        - name: SENTRY_MAIL_HOST
+        - name: SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE
+        - name: OPENAI_API_KEY
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: getsentry/sentry:nightly
+        name: events-consumer
+        resources:
+          limits:
+            cpu: 50m
+            memory: 500Mi
+          requests:
+            cpu: 10m
+            memory: 200Mi
+        volumeMounts:
+        - mountPath: /data
+          name: sentry-data
+        - mountPath: /geoip
+          name: geoip
+        - mountPath: /usr/local/share/ca-certificates
+          name: certificates
+        - mountPath: /etc/sentry/sentry.conf.py
+          name: sentry-config
+          subPath: sentry.conf.py
+        - mountPath: /etc/sentry/requirements.txt
+          name: sentry-config
+          subPath: requirements.txt
+        - mountPath: /etc/sentry/config.yml
+          name: sentry-config
+          subPath: config.yml
+      volumes:
+      - name: sentry-data
+        persistentVolumeClaim:
+          claimName: sentry-data
+      - name: geoip
+        persistentVolumeClaim:
+          claimName: geoip
+      - name: certificates
+        secret:
+          defaultMode: 420
+          secretName: sentry-certificates
+      - name: sentry-config
+        secret:
+          defaultMode: 420
+          optional: false
+          secretName: sentry-config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: attachments-consumer
+    app.kubernetes.io/instance: attachments-consumer
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: attachments-consumer
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: attachments-consumer
+      app.kubernetes.io/instance: attachments-consumer
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: attachments-consumer
+        app.kubernetes.io/instance: attachments-consumer
+    spec:
+      containers:
+      - args:
+        - pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh
+        - run consumer ingest-attachments --consumer-group ingest-consumer
+        command:
+        - /bin/bash
+        - -c
+        env:
+        - name: PYTHONUSERBASE
+          value: /data/custom-packages
+        - name: SENTRY_CONF
+          value: /etc/sentry
+        - name: SNUBA
+          value: http://snuba-api:1218
+        - name: VROOM
+          value: http://vroom:8085
+        - name: DEFAULT_CA_BUNDLE
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: REQUESTS_CA_BUNDLE
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: SENTRY_EVENT_RETENTION_DAYS
+        - name: SENTRY_MAIL_HOST
+        - name: SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE
+        - name: OPENAI_API_KEY
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: getsentry/sentry:nightly
+        name: attachments-consumer
+        resources:
+          limits:
+            cpu: 50m
+            memory: 500Mi
+          requests:
+            cpu: 10m
+            memory: 200Mi
+        volumeMounts:
+        - mountPath: /data
+          name: sentry-data
+        - mountPath: /geoip
+          name: geoip
+        - mountPath: /usr/local/share/ca-certificates
+          name: certificates
+        - mountPath: /etc/sentry/sentry.conf.py
+          name: sentry-config
+          subPath: sentry.conf.py
+        - mountPath: /etc/sentry/requirements.txt
+          name: sentry-config
+          subPath: requirements.txt
+        - mountPath: /etc/sentry/config.yml
+          name: sentry-config
+          subPath: config.yml
+      volumes:
+      - name: sentry-data
+        persistentVolumeClaim:
+          claimName: sentry-data
+      - name: geoip
+        persistentVolumeClaim:
+          claimName: geoip
+      - name: certificates
+        secret:
+          defaultMode: 420
+          secretName: sentry-certificates
+      - name: sentry-config
+        secret:
+          defaultMode: 420
+          optional: false
+          secretName: sentry-config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: transactions-consumer
+    app.kubernetes.io/instance: transactions-consumer
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: transactions-consumer
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: transactions-consumer
+      app.kubernetes.io/instance: transactions-consumer
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: transactions-consumer
+        app.kubernetes.io/instance: transactions-consumer
+    spec:
+      containers:
+      - args:
+        - pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh
+        - run consumer ingest-transactions --consumer-group ingest-consumer
+        command:
+        - /bin/bash
+        - -c
+        env:
+        - name: PYTHONUSERBASE
+          value: /data/custom-packages
+        - name: SENTRY_CONF
+          value: /etc/sentry
+        - name: SNUBA
+          value: http://snuba-api:1218
+        - name: VROOM
+          value: http://vroom:8085
+        - name: DEFAULT_CA_BUNDLE
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: REQUESTS_CA_BUNDLE
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: SENTRY_EVENT_RETENTION_DAYS
+        - name: SENTRY_MAIL_HOST
+        - name: SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE
+        - name: OPENAI_API_KEY
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: getsentry/sentry:nightly
+        name: transactions-consumer
+        resources:
+          limits:
+            cpu: 50m
+            memory: 500Mi
+          requests:
+            cpu: 10m
+            memory: 200Mi
+        volumeMounts:
+        - mountPath: /data
+          name: sentry-data
+        - mountPath: /geoip
+          name: geoip
+        - mountPath: /usr/local/share/ca-certificates
+          name: certificates
+        - mountPath: /etc/sentry/sentry.conf.py
+          name: sentry-config
+          subPath: sentry.conf.py
+        - mountPath: /etc/sentry/requirements.txt
+          name: sentry-config
+          subPath: requirements.txt
+        - mountPath: /etc/sentry/config.yml
+          name: sentry-config
+          subPath: config.yml
+      volumes:
+      - name: sentry-data
+        persistentVolumeClaim:
+          claimName: sentry-data
+      - name: geoip
+        persistentVolumeClaim:
+          claimName: geoip
+      - name: certificates
+        secret:
+          defaultMode: 420
+          secretName: sentry-certificates
+      - name: sentry-config
+        secret:
+          defaultMode: 420
+          optional: false
+          secretName: sentry-config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: ingest-replay-recordings
+    app.kubernetes.io/instance: ingest-replay-recordings
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: ingest-replay-recordings
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ingest-replay-recordings
+      app.kubernetes.io/instance: ingest-replay-recordings
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ingest-replay-recordings
+        app.kubernetes.io/instance: ingest-replay-recordings
+    spec:
+      containers:
+      - args:
+        - pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh
+        - run consumer ingest-replay-recordings --consumer-group ingest-replay-recordings
+        command:
+        - /bin/bash
+        - -c
+        env:
+        - name: PYTHONUSERBASE
+          value: /data/custom-packages
+        - name: SENTRY_CONF
+          value: /etc/sentry
+        - name: SNUBA
+          value: http://snuba-api:1218
+        - name: VROOM
+          value: http://vroom:8085
+        - name: DEFAULT_CA_BUNDLE
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: REQUESTS_CA_BUNDLE
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: SENTRY_EVENT_RETENTION_DAYS
+        - name: SENTRY_MAIL_HOST
+        - name: SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE
+        - name: OPENAI_API_KEY
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: getsentry/sentry:nightly
+        name: ingest-replay-recordings
+        resources:
+          limits:
+            cpu: 50m
+            memory: 500Mi
+          requests:
+            cpu: 10m
+            memory: 200Mi
+        volumeMounts:
+        - mountPath: /data
+          name: sentry-data
+        - mountPath: /geoip
+          name: geoip
+        - mountPath: /usr/local/share/ca-certificates
+          name: certificates
+        - mountPath: /etc/sentry/sentry.conf.py
+          name: sentry-config
+          subPath: sentry.conf.py
+        - mountPath: /etc/sentry/requirements.txt
+          name: sentry-config
+          subPath: requirements.txt
+        - mountPath: /etc/sentry/config.yml
+          name: sentry-config
+          subPath: config.yml
+      volumes:
+      - name: sentry-data
+        persistentVolumeClaim:
+          claimName: sentry-data
+      - name: geoip
+        persistentVolumeClaim:
+          claimName: geoip
+      - name: certificates
+        secret:
+          defaultMode: 420
+          secretName: sentry-certificates
+      - name: sentry-config
+        secret:
+          defaultMode: 420
+          optional: false
+          secretName: sentry-config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: ingest-profiles
+    app.kubernetes.io/instance: ingest-profiles
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: ingest-profiles
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ingest-profiles
+      app.kubernetes.io/instance: ingest-profiles
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ingest-profiles
+        app.kubernetes.io/instance: ingest-profiles
+    spec:
+      containers:
+      - args:
+        - pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh
+        - run consumer --no-strict-offset-reset ingest-profiles --consumer-group ingest-profiles
+        command:
+        - /bin/bash
+        - -c
+        env:
+        - name: PYTHONUSERBASE
+          value: /data/custom-packages
+        - name: SENTRY_CONF
+          value: /etc/sentry
+        - name: SNUBA
+          value: http://snuba-api:1218
+        - name: VROOM
+          value: http://vroom:8085
+        - name: DEFAULT_CA_BUNDLE
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: REQUESTS_CA_BUNDLE
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: SENTRY_EVENT_RETENTION_DAYS
+        - name: SENTRY_MAIL_HOST
+        - name: SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE
+        - name: OPENAI_API_KEY
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: getsentry/sentry:nightly
+        name: ingest-profiles
+        resources:
+          limits:
+            cpu: 50m
+            memory: 500Mi
+          requests:
+            cpu: 10m
+            memory: 200Mi
+        volumeMounts:
+        - mountPath: /data
+          name: sentry-data
+        - mountPath: /geoip
+          name: geoip
+        - mountPath: /usr/local/share/ca-certificates
+          name: certificates
+        - mountPath: /etc/sentry/sentry.conf.py
+          name: sentry-config
+          subPath: sentry.conf.py
+        - mountPath: /etc/sentry/requirements.txt
+          name: sentry-config
+          subPath: requirements.txt
+        - mountPath: /etc/sentry/config.yml
+          name: sentry-config
+          subPath: config.yml
+      volumes:
+      - name: sentry-data
+        persistentVolumeClaim:
+          claimName: sentry-data
+      - name: geoip
+        persistentVolumeClaim:
+          claimName: geoip
+      - name: certificates
+        secret:
+          defaultMode: 420
+          secretName: sentry-certificates
+      - name: sentry-config
+        secret:
+          defaultMode: 420
+          optional: false
+          secretName: sentry-config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: post-process-forwarder-errors
+    app.kubernetes.io/instance: post-process-forwarder-errors
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: post-process-forwarder-errors
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: post-process-forwarder-errors
+      app.kubernetes.io/instance: post-process-forwarder-errors
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: post-process-forwarder-errors
+        app.kubernetes.io/instance: post-process-forwarder-errors
+    spec:
+      containers:
+      - args:
+        - pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh
+        - run consumer post-process-forwarder-errors --consumer-group post-process-forwarder --synchronize-commit-log-topic=snuba-commit-log --synchronize-commit-group=snuba-consumers
+        command:
+        - /bin/bash
+        - -c
+        env:
+        - name: PYTHONUSERBASE
+          value: /data/custom-packages
+        - name: SENTRY_CONF
+          value: /etc/sentry
+        - name: SNUBA
+          value: http://snuba-api:1218
+        - name: VROOM
+          value: http://vroom:8085
+        - name: DEFAULT_CA_BUNDLE
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: REQUESTS_CA_BUNDLE
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: SENTRY_EVENT_RETENTION_DAYS
+        - name: SENTRY_MAIL_HOST
+        - name: SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE
+        - name: OPENAI_API_KEY
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: getsentry/sentry:nightly
+        name: post-process-forwarder-errors
+        resources:
+          limits:
+            cpu: 100m
+            memory: 500Mi
+          requests:
+            cpu: 10m
+            memory: 200Mi
+        volumeMounts:
+        - mountPath: /data
+          name: sentry-data
+        - mountPath: /geoip
+          name: geoip
+        - mountPath: /usr/local/share/ca-certificates
+          name: certificates
+        - mountPath: /etc/sentry/sentry.conf.py
+          name: sentry-config
+          subPath: sentry.conf.py
+        - mountPath: /etc/sentry/requirements.txt
+          name: sentry-config
+          subPath: requirements.txt
+        - mountPath: /etc/sentry/config.yml
+          name: sentry-config
+          subPath: config.yml
+      volumes:
+      - name: sentry-data
+        persistentVolumeClaim:
+          claimName: sentry-data
+      - name: geoip
+        persistentVolumeClaim:
+          claimName: geoip
+      - name: certificates
+        secret:
+          defaultMode: 420
+          secretName: sentry-certificates
+      - name: sentry-config
+        secret:
+          defaultMode: 420
+          optional: false
+          secretName: sentry-config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: post-process-forwarder-transactions
+    app.kubernetes.io/instance: post-process-forwarder-transactions
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: post-process-forwarder-transactions
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: post-process-forwarder-transactions
+      app.kubernetes.io/instance: post-process-forwarder-transactions
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: post-process-forwarder-transactions
+        app.kubernetes.io/instance: post-process-forwarder-transactions
+    spec:
+      containers:
+      - args:
+        - pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh
+        - run consumer post-process-forwarder-transactions --consumer-group post-process-forwarder --synchronize-commit-log-topic=snuba-transactions-commit-log --synchronize-commit-group transactions_group
+        command:
+        - /bin/bash
+        - -c
+        env:
+        - name: PYTHONUSERBASE
+          value: /data/custom-packages
+        - name: SENTRY_CONF
+          value: /etc/sentry
+        - name: SNUBA
+          value: http://snuba-api:1218
+        - name: VROOM
+          value: http://vroom:8085
+        - name: DEFAULT_CA_BUNDLE
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: REQUESTS_CA_BUNDLE
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: SENTRY_EVENT_RETENTION_DAYS
+        - name: SENTRY_MAIL_HOST
+        - name: SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE
+        - name: OPENAI_API_KEY
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: getsentry/sentry:nightly
+        name: post-process-forwarder-transactions
+        resources:
+          limits:
+            cpu: 100m
+            memory: 500Mi
+          requests:
+            cpu: 10m
+            memory: 200Mi
+        volumeMounts:
+        - mountPath: /data
+          name: sentry-data
+        - mountPath: /geoip
+          name: geoip
+        - mountPath: /usr/local/share/ca-certificates
+          name: certificates
+        - mountPath: /etc/sentry/sentry.conf.py
+          name: sentry-config
+          subPath: sentry.conf.py
+        - mountPath: /etc/sentry/requirements.txt
+          name: sentry-config
+          subPath: requirements.txt
+        - mountPath: /etc/sentry/config.yml
+          name: sentry-config
+          subPath: config.yml
+      volumes:
+      - name: sentry-data
+        persistentVolumeClaim:
+          claimName: sentry-data
+      - name: geoip
+        persistentVolumeClaim:
+          claimName: geoip
+      - name: certificates
+        secret:
+          defaultMode: 420
+          secretName: sentry-certificates
+      - name: sentry-config
+        secret:
+          defaultMode: 420
+          optional: false
+          secretName: sentry-config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: subscription-consumer-events
+    app.kubernetes.io/instance: subscription-consumer-events
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: subscription-consumer-events
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: subscription-consumer-events
+      app.kubernetes.io/instance: subscription-consumer-events
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: subscription-consumer-events
+        app.kubernetes.io/instance: subscription-consumer-events
+    spec:
+      containers:
+      - args:
+        - pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh
+        - run consumer events-subscription-results --consumer-group query-subscription-consumer
+        command:
+        - /bin/bash
+        - -c
+        env:
+        - name: PYTHONUSERBASE
+          value: /data/custom-packages
+        - name: SENTRY_CONF
+          value: /etc/sentry
+        - name: SNUBA
+          value: http://snuba-api:1218
+        - name: VROOM
+          value: http://vroom:8085
+        - name: DEFAULT_CA_BUNDLE
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: REQUESTS_CA_BUNDLE
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: SENTRY_EVENT_RETENTION_DAYS
+        - name: SENTRY_MAIL_HOST
+        - name: SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE
+        - name: OPENAI_API_KEY
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: getsentry/sentry:nightly
+        name: subscription-consumer-events
+        resources:
+          limits:
+            cpu: 50m
+            memory: 500Mi
+          requests:
+            cpu: 10m
+            memory: 200Mi
+        volumeMounts:
+        - mountPath: /data
+          name: sentry-data
+        - mountPath: /geoip
+          name: geoip
+        - mountPath: /usr/local/share/ca-certificates
+          name: certificates
+        - mountPath: /etc/sentry/sentry.conf.py
+          name: sentry-config
+          subPath: sentry.conf.py
+        - mountPath: /etc/sentry/requirements.txt
+          name: sentry-config
+          subPath: requirements.txt
+        - mountPath: /etc/sentry/config.yml
+          name: sentry-config
+          subPath: config.yml
+      volumes:
+      - name: sentry-data
+        persistentVolumeClaim:
+          claimName: sentry-data
+      - name: geoip
+        persistentVolumeClaim:
+          claimName: geoip
+      - name: certificates
+        secret:
+          defaultMode: 420
+          secretName: sentry-certificates
+      - name: sentry-config
+        secret:
+          defaultMode: 420
+          optional: false
+          secretName: sentry-config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: subscription-consumer-transactions
+    app.kubernetes.io/instance: subscription-consumer-transactions
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: subscription-consumer-transactions
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: subscription-consumer-transactions
+      app.kubernetes.io/instance: subscription-consumer-transactions
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: subscription-consumer-transactions
+        app.kubernetes.io/instance: subscription-consumer-transactions
+    spec:
+      containers:
+      - args:
+        - pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh
+        - run consumer transactions-subscription-results --consumer-group query-subscription-consumer
+        command:
+        - /bin/bash
+        - -c
+        env:
+        - name: PYTHONUSERBASE
+          value: /data/custom-packages
+        - name: SENTRY_CONF
+          value: /etc/sentry
+        - name: SNUBA
+          value: http://snuba-api:1218
+        - name: VROOM
+          value: http://vroom:8085
+        - name: DEFAULT_CA_BUNDLE
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: REQUESTS_CA_BUNDLE
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: SENTRY_EVENT_RETENTION_DAYS
+        - name: SENTRY_MAIL_HOST
+        - name: SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE
+        - name: OPENAI_API_KEY
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: getsentry/sentry:nightly
+        name: subscription-consumer-transactions
+        resources:
+          limits:
+            cpu: 50m
+            memory: 500Mi
+          requests:
+            cpu: 10m
+            memory: 200Mi
+        volumeMounts:
+        - mountPath: /data
+          name: sentry-data
+        - mountPath: /geoip
+          name: geoip
+        - mountPath: /usr/local/share/ca-certificates
+          name: certificates
+        - mountPath: /etc/sentry/sentry.conf.py
+          name: sentry-config
+          subPath: sentry.conf.py
+        - mountPath: /etc/sentry/requirements.txt
+          name: sentry-config
+          subPath: requirements.txt
+        - mountPath: /etc/sentry/config.yml
+          name: sentry-config
+          subPath: config.yml
+      volumes:
+      - name: sentry-data
+        persistentVolumeClaim:
+          claimName: sentry-data
+      - name: geoip
+        persistentVolumeClaim:
+          claimName: geoip
+      - name: certificates
+        secret:
+          defaultMode: 420
+          secretName: sentry-certificates
+      - name: sentry-config
+        secret:
+          defaultMode: 420
+          optional: false
+          secretName: sentry-config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: sentry-cleanup
+    app.kubernetes.io/instance: sentry-cleanup
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: sentry-cleanup
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sentry-cleanup
+      app.kubernetes.io/instance: sentry-cleanup
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sentry-cleanup
+        app.kubernetes.io/instance: sentry-cleanup
+    spec:
+      containers:
+      - args:
+        - pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh
+        - '"0 0 * * * gosu sentry sentry cleanup --days 90"'
+        command:
+        - /bin/bash
+        - -c
+        env:
+        - name: PYTHONUSERBASE
+          value: /data/custom-packages
+        - name: SENTRY_CONF
+          value: /etc/sentry
+        - name: SNUBA
+          value: http://snuba-api:1218
+        - name: VROOM
+          value: http://vroom:8085
+        - name: DEFAULT_CA_BUNDLE
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: REQUESTS_CA_BUNDLE
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR
+          value: /etc/ssl/certs/ca-certificates.crt
+        - name: SENTRY_EVENT_RETENTION_DAYS
+        - name: SENTRY_MAIL_HOST
+        - name: SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE
+        - name: OPENAI_API_KEY
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: sentry-cleanup-self-hosted-local
+        name: sentry-cleanup
+        resources: {}
+        volumeMounts:
+        - mountPath: /data
+          name: sentry-data
+        - mountPath: /geoip
+          name: geoip
+        - mountPath: /usr/local/share/ca-certificates
+          name: certificates
+        - mountPath: /etc/sentry/sentry.conf.py
+          name: sentry-config
+          subPath: sentry.conf.py
+        - mountPath: /etc/sentry/requirements.txt
+          name: sentry-config
+          subPath: requirements.txt
+        - mountPath: /etc/sentry/config.yml
+          name: sentry-config
+          subPath: config.yml
+      volumes:
+      - name: sentry-data
+        persistentVolumeClaim:
+          claimName: sentry-data
+      - name: geoip
+        persistentVolumeClaim:
+          claimName: geoip
+      - name: certificates
+        secret:
+          defaultMode: 420
+          secretName: sentry-certificates
+      - name: sentry-config
+        secret:
+          defaultMode: 420
+          optional: false
+          secretName: sentry-config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: relay
+    app.kubernetes.io/instance: relay
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: relay
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: relay
+      app.kubernetes.io/instance: relay
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: relay
+        app.kubernetes.io/instance: relay
+    spec:
+      containers:
+      - args:
+        - pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh
+        command:
+        - /bin/bash
+        - -c
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: getsentry/relay:nightly
+        name: relay
+        resources:
+          limits:
+            cpu: 100m
+            memory: 1Gi
+          requests:
+            cpu: 20m
+            memory: 500Mi
+        volumeMounts:
+        - mountPath: /data
+          name: sentry-data
+        - mountPath: /etc/sentry/sentry.conf.py
+          name: sentry-config
+          subPath: sentry.conf.py
+        - mountPath: /etc/sentry/requirements.txt
+          name: sentry-config
+          subPath: requirements.txt
+        - mountPath: /etc/sentry/config.yml
+          name: sentry-config
+          subPath: config.yml
+      volumes:
+      - name: sentry-config
+        secret:
+          defaultMode: 420
+          optional: false
+          secretName: sentry-config
+      - name: sentry-data
+        persistentVolumeClaim:
+          claimName: sentry-data
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: vroom
+    app.kubernetes.io/instance: vroom
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: vroom
+  namespace: sentry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vroom
+      app.kubernetes.io/instance: vroom
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vroom
+        app.kubernetes.io/instance: vroom
+    spec:
+      containers:
+      - args:
+        - pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh
+        command:
+        - /bin/bash
+        - -c
+        env:
+        - name: SENTRY_KAFKA_BROKERS_PROFILING
+          value: kafka:9092
+        - name: SENTRY_KAFKA_BROKERS_OCCURRENCES
+          value: kafka:9092
+        - name: SENTRY_BUCKET_PROFILES
+          value: file://localhost//var/lib/sentry-profiles
+        - name: SENTRY_SNUBA_HOST
+          value: http://snuba-api:1218
+        envFrom:
+        - secretRef:
+            name: sentry-env
+        image: getsentry/vroom:nightly
+        name: vroom
+        resources: {}
+        volumeMounts:
+        - mountPath: /var/lib/sentry-profiles
+          name: sentry-vroom
+        - mountPath: /data
+          name: sentry-data
+        - mountPath: /etc/sentry/sentry.conf.py
+          name: sentry-config
+          subPath: sentry.conf.py
+        - mountPath: /etc/sentry/requirements.txt
+          name: sentry-config
+          subPath: requirements.txt
+        - mountPath: /etc/sentry/config.yml
+          name: sentry-config
+          subPath: config.yml
+      volumes:
+      - name: sentry-vroom
+        persistentVolumeClaim:
+          claimName: sentry-vroom
+      - name: sentry-config
+        secret:
+          defaultMode: 420
+          optional: false
+          secretName: sentry-config
+      - name: sentry-data
+        persistentVolumeClaim:
+          claimName: sentry-data
+---
+metadata:
+  labels:
+    app.kubernetes.io/name: web
+    app.kubernetes.io/instance: web
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: web
+  namespace: sentry
+spec:
+  ports:
+  - name: web
+    port: 9000
+    targetPort: 9000
+---
+metadata:
+  labels:
+    app.kubernetes.io/name: snuba-api
+    app.kubernetes.io/instance: snuba-api
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: snuba-api
+  namespace: sentry
+spec:
+  ports:
+  - name: snuba-api
+    port: 1218
+    targetPort: 1218
+---
+metadata:
+  labels:
+    app.kubernetes.io/name: symbolicator
+    app.kubernetes.io/instance: symbolicator
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: symbolicator
+  namespace: sentry
+spec:
+  ports:
+  - name: symbolicator
+    port: 3021
+    targetPort: 3021
+---
+metadata:
+  labels:
+    app.kubernetes.io/name: relay
+    app.kubernetes.io/instance: relay
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: relay
+  namespace: sentry
+spec:
+  ports:
+  - name: relay
+    port: 3000
+    targetPort: 3000
+---
+metadata:
+  labels:
+    app.kubernetes.io/name: vroom
+    app.kubernetes.io/instance: vroom
+    app.kubernetes.io/version: nightly
+    app.kubernetes.io/managed-by: sentry-operator
+  name: vroom
+  namespace: sentry
+spec:
+  ports:
+  - name: vroom
+    port: 8085
+    targetPort: 8085
+---
+status: {}
+spec:
+  secretName: sentry-cert
+  duration: 87600h
+  commonName: sentry.sentry.svc.cluster.local
+  dnsNames:
+  - sentry
+  - sentry.sentry
+  - sentry.sentry.svc.cluster.local
+  issuerRef:
+    name: self-signed
+    kind: ClusterIssuer
+metadata:
+  name: sentry-cert
+  namespace: sentry
+apiVersion: cert-manager.io/v1
+kind: Certificate
