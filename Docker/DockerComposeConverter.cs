@@ -200,7 +200,7 @@ internal class DockerComposeConverter
                     MountPath = volumePath
                 };
                 container.VolumeMounts.Add(volumeMount);
-                podSpec.Volumes.Add(new V1Volume(volumeName, secret: new V1SecretVolumeSource(420, secretName: "sentry-certificates")));
+                podSpec.Volumes.Add(new V1Volume(volumeName, secret: new V1SecretVolumeSource(420, secretName: sentryDeployment.Spec.Certificate?.SecretName ?? (sentryDeployment.Name() + "-certificate"))));
                 continue;
             }
             
