@@ -6,6 +6,7 @@ using KubeOps.KubernetesClient;
 using KubeOps.Operator.Controller;
 using KubeOps.Operator.Controller.Results;
 using KubeOps.Operator.Entities.Extensions;
+using KubeOps.Operator.Events;
 using KubeOps.Operator.Finalizer;
 using KubeOps.Operator.Rbac;
 using Microsoft.Extensions.Caching.Distributed;
@@ -29,18 +30,22 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
     private readonly HttpClient _httpClient;
     private readonly IKubernetesClient _client;
     private readonly IDistributedCache _cache;
+    private readonly IEventManager _manager;
     
-    public SentryDeploymentController(ILogger<SentryDeploymentController> logger, IFinalizerManager<SentryDeployment> finalizerManager, IHttpClientFactory httpClientFactory, IKubernetesClient client, IDistributedCache cache)
+    public SentryDeploymentController(ILogger<SentryDeploymentController> logger, IFinalizerManager<SentryDeployment> finalizerManager, IHttpClientFactory httpClientFactory, IKubernetesClient client, IDistributedCache cache, IEventManager manager)
     {
         _logger = logger;
         _finalizerManager = finalizerManager;
         _client = client;
         _cache = cache;
+        _manager = manager;
         _httpClient = httpClientFactory.CreateClient();
     }
 
     public async Task<ResourceControllerResult?> ReconcileAsync(SentryDeployment entity)
     {
+        entity.Status.Status = "Updating";
+        await _client.UpdateStatus(entity);
         _logger.LogInformation("Entity {Name} called {ReconcileAsyncName}", entity.Name(), nameof(ReconcileAsync));
         await _finalizerManager.RegisterFinalizerAsync<SentryDeploymentFinalizer>(entity);
 
@@ -154,7 +159,14 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
             }
         }
 
-        var certName = entity.Spec.CertSecretName ?? (entity.Name() + "-certificate");
+        if (!(entity.Spec.Certificate?.Install ?? true))
+        {
+            entity.Status.Status = "Ready";
+            await _client.UpdateStatus(entity);
+            return null;
+        }
+        
+        var certName = entity.Spec.Certificate?.CertificateCRDName ?? (entity.Name() + "-certificate");
         var certificate = await _client.Get<Certificate>(certName, entity.Namespace());
         _logger.LogInformation("Certificate {CertificateName} found: {CertificateFound}", certName, certificate != null);
         if (certificate == null)
@@ -175,13 +187,13 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
                         entity.Name(),
                         entity.Name() + "." + entity.Namespace(),
                         entity.Name() + "." + entity.Namespace() + ".svc.cluster.local"
-                    },
+                    }.Concat(entity.Spec.Certificate?.CustomHosts ?? Array.Empty<string>()).ToList(),
                     IssuerRef = new Certificate.IssuerReference()
                     {
-                        Name = "self-signed",
-                        Kind = "ClusterIssuer"
+                        Name = entity.Spec.Certificate?.IssuerName ?? "self-signed",
+                        Kind = entity.Spec.Certificate?.IssuerKind ?? "ClusterIssuer"
                     },
-                    SecretName = certName
+                    SecretName = entity.Spec.Certificate?.SecretName ?? (entity.Name() + "-certificate")
                 }
             };
             certificate.AddOwnerReference(entity.MakeOwnerReference());
@@ -194,10 +206,16 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
             catch (Exception e)
             {
                 _logger.LogError(e, "Error creating certificate");
+                
+                entity.Status.Status = "Error";
+                await _client.UpdateStatus(entity);
+                await _manager.PublishAsync(entity, "Error", "Error creating certificate: " + e.Message);
                 return ResourceControllerResult.RequeueEvent(TimeSpan.FromSeconds(15));
             }
         }
-        
+
+        entity.Status.Status = "Ready";
+        await _client.UpdateStatus(entity);
         //return ResourceControllerResult.RequeueEvent(TimeSpan.FromSeconds(15));
         return null;
     }
@@ -271,7 +289,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
         }
         dockerComposeRaw = (entity.Spec.Config ?? new()).ReplaceVariables(dockerComposeRaw);
         var dockerComposeConverter = new DockerComposeConverter();
-        var (deployments, services) = dockerComposeConverter.Convert(dockerComposeRaw, entity, entity.Spec.Version ?? "nightly");
+        var (deployments, services) = dockerComposeConverter.Convert(dockerComposeRaw, entity, entity.Spec.Version == "master" ? "nightly" : entity.Spec.Version ?? "nightly");
         
         return (deployments, services);
     }

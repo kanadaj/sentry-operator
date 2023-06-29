@@ -26,15 +26,35 @@ public class SentryDeployment : CustomKubernetesEntity<SentryDeployment.SentryDe
         
         [Description("Override the default resource limits")]
         public ResourceLimitConfig? Resources { get; set; }
-
-        [Description("Override the name of the certificate secret")]
-        public string? CertSecretName { get; set; }
+        
+        public SentryDeploymentCertificateConfig? Certificate { get; set; } 
     }
 
     public class SentryDeploymentStatus
     {
         public string Status { get; set; } = string.Empty;
     }
+}
+
+public class SentryDeploymentCertificateConfig
+{
+    public bool? Install { get; set; }
+    
+    [Description("Override the name of the Certificate CRD generated")]
+    public string? CertificateCRDName { get; set; }
+    
+    [Description("Override the name of the issuer")]
+    public string? IssuerName { get; set; }
+    
+    [Description("Override the kind of the issuer")]
+    public string IssuerKind { get; set; } = "ClusterIssuer";
+    
+    [Description("Override the name of the certificate secret")]
+    public string? SecretName { get; set; }
+    
+    [Description("Add additional hosts to the certificate")]
+    
+    public string[] CustomHosts { get; set; } = Array.Empty<string>();
 }
 
 public class ResourceLimitConfig
