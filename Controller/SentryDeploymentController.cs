@@ -77,6 +77,34 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
             });
         }
         
+        var cronConfigMap = await _client.Get<V1ConfigMap>("sentry-cron", entity.Namespace());
+        if (cronConfigMap == null)
+        {
+            cronConfigMap = new V1ConfigMap
+            {
+                Metadata = new V1ObjectMeta
+                {
+                    Name = "sentry-cron",
+                    NamespaceProperty = entity.Namespace()
+                },
+                Data = new Dictionary<string, string>
+                {
+                    ["entrypoint.sh"] = """
+                    declare -p | grep -Ev 'BASHOPTS|BASH_VERSINFO|EUID|PPID|SHELLOPTS|UID' >/container.env
+
+                    { for cron_job in "$@"; do echo -e "SHELL=/bin/bash
+                    BASH_ENV=/container.env
+                    ${cron_job} > /proc/1/fd/1 2>/proc/1/fd/2"; done; } |
+                      sed --regexp-extended 's/\\(.)/\1/g' |
+                      crontab -
+                    crontab -l
+                    exec cron -f -l -L 15
+                    """.Replace("\r\n", "\n"), // Make sure we don't do Windows line endings on Linux!
+                }
+            };
+            cronConfigMap.AddOwnerReference(entity.MakeOwnerReference());
+            await _client.Create(cronConfigMap);
+        }
         // var snubaEnvConfigMap = await _client.Get<V1ConfigMap>("snuba-env", entity.Namespace());
         //
         // if (snubaEnvConfigMap == null)
@@ -214,6 +242,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
             }
         }
 
+        entity = (await _client.Get<SentryDeployment>(entity.Name(), entity.Namespace()))!;
         entity.Status.Status = "Ready";
         await _client.UpdateStatus(entity);
         //return ResourceControllerResult.RequeueEvent(TimeSpan.FromSeconds(15));
@@ -288,7 +317,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
             }
         }
         dockerComposeRaw = (entity.Spec.Config ?? new()).ReplaceVariables(dockerComposeRaw);
-        var dockerComposeConverter = new DockerComposeConverter();
+        var dockerComposeConverter = new DockerComposeConverter(_logger);
         var (deployments, services) = dockerComposeConverter.Convert(dockerComposeRaw, entity, entity.Spec.Version == "master" ? "nightly" : entity.Spec.Version ?? "nightly");
         
         return (deployments, services);

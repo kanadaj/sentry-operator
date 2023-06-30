@@ -1,4 +1,5 @@
 ﻿using k8s.Models;
+using SentryOperator.Controller;
 using SentryOperator.Entities;
 using YamlDotNet.Core;
 using YamlDotNet.Serialization;
@@ -19,13 +20,23 @@ internal class DockerComposeConverter
         "nginx"
     };
 
+    private readonly ILogger _logger;
+
+    public DockerComposeConverter(ILogger logger)
+    {
+        _logger = logger;
+    }
+
     public (V1Deployment[] Deployments, V1Service[] Services) Convert(string dockerComposeYaml, SentryDeployment sentryDeployment, string version = "nightly")
     {
         var dockerCompose = Parse(dockerComposeYaml);
         var deployments = new List<V1Deployment>();
+        
+        _logger.LogInformation("Converting docker-compose.yml to Kubernetes manifests");
 
         foreach (var service in dockerCompose.Services!)
         {
+            _logger.LogInformation("Converting service {ServiceName}", service.Key);
             if (_ignoredServices.Contains(service.Key)) continue;
             
             if (service.Value.Image == "sentry-self-hosted-local" || (service.Value.Image?.StartsWith("getsentry/sentry:") ?? true))
@@ -35,6 +46,10 @@ internal class DockerComposeConverter
             else if (service.Value.Image == "$SNUBA_IMAGE" || (service.Value.Image?.StartsWith("getsentry/snuba:") ?? true))
             {
                 service.Value.Image = $"getsentry/snuba:{version}";
+            }
+            else if (service.Value.Image.Contains("nightly") && !service.Value.Image.Contains("symbolicator")) // Symbolicator is versioned differently
+            {
+                service.Value.Image = service.Value.Image.Replace("nightly", version);
             }
 
             var deployment = new V1Deployment
@@ -83,7 +98,7 @@ internal class DockerComposeConverter
                                 { "app.kubernetes.io/instance", service.Key },
                             }
                         },
-                        Spec = GeneratePodSpec(service, sentryDeployment)
+                        Spec = GeneratePodSpec(service, sentryDeployment, version)
                     }
                 }
             };
@@ -100,6 +115,7 @@ internal class DockerComposeConverter
          * symbolicator: 3021
          * relay: 3000
          */
+        _logger.LogInformation("Generating K8s services");
         foreach (var (service, port) in new Dictionary<string, int>
                  {
                         { "web", 9000 },
@@ -142,9 +158,17 @@ internal class DockerComposeConverter
         return (deployments.ToArray(), services.ToArray());
     }
 
-    private V1PodSpec GeneratePodSpec(KeyValuePair<string, DockerService> service, SentryDeployment sentryDeployment)
+    private V1PodSpec GeneratePodSpec(KeyValuePair<string, DockerService> service, SentryDeployment sentryDeployment, string version)
     {
-        var container = service.Value.Image!.Contains("snuba", StringComparison.OrdinalIgnoreCase) ? GenerateSnubaContainer(service.Key, sentryDeployment, service.Value) : GenerateSentryContainer(service.Key, sentryDeployment, service.Value);
+        bool isCleanup = false;
+        if (service.Value.Image == "sentry-cleanup-self-hosted-local")
+        {
+            _logger.LogInformation("Converting service {ServiceName} to cleanup", service.Key);
+            isCleanup = true;
+            service.Value.Image = $"getsentry/sentry:{version}";
+        }
+        _logger.LogInformation("Generating pod spec for {ServiceName}", service.Key);
+        var container = service.Value.Image!.Contains("/sentry", StringComparison.OrdinalIgnoreCase) ? GenerateSentryContainer(service.Key, sentryDeployment, service.Value) : GenerateSnubaContainer(service.Key, sentryDeployment, service.Value);
         var podSpec = new V1PodSpec
         {
             Containers = new List<V1Container>
@@ -156,7 +180,33 @@ internal class DockerComposeConverter
                 
             }
         };
+        
+        if (isCleanup)
+        {
+            _logger.LogInformation("Adding cleanup specific configuration for {ServiceName}", service.Key);
+            container.VolumeMounts.Add(new V1VolumeMount
+            {
+                Name = "sentry-cron",
+                MountPath = "/entrypoint.sh",
+                SubPath = "entrypoint.sh"
+            });
+            podSpec.Volumes.Add(new V1Volume
+            {
+                Name = "sentry-cron",
+                ConfigMap = new V1ConfigMapVolumeSource
+                {
+                    Name = "sentry-cron",
+                    Optional = false,
+                    DefaultMode = 420
+                }
+            });
+            container.Command = new List<string>
+            {
+                "pip install -r /etc/sentry/requirements.txt && exec /entrypoint.sh"
+            };
+        }
 
+        _logger.LogInformation("Adding sentry-env");
         container.EnvFrom = new List<V1EnvFromSource>
         {
             new V1EnvFromSource
@@ -167,17 +217,21 @@ internal class DockerComposeConverter
 
         if (sentryDeployment.Spec.Environment != null)
         {
-            foreach (var env in container.Env)
+            _logger.LogInformation("Adding environment variables");
+            container.Env ??= new List<V1EnvVar>();
+            foreach (var envVar in sentryDeployment.Spec.Environment)
             {
-                if(sentryDeployment.Spec.Environment.TryGetValue(env.Name, out var value))
+                var containerEnvVar = container.Env.FirstOrDefault(x => x.Name == envVar.Key) ?? new V1EnvVar
                 {
-                    env.Value = value;
-                } 
-            }   
+                    Name = envVar.Key
+                };
+                containerEnvVar.Value = envVar.Value;
+            }
         }
         
         foreach(var volumeObject in service.Value.Volumes?.AsEnumerable() ?? Array.Empty<object>())
         {
+            _logger.LogInformation("Adding volume {Volume}", volumeObject);
             var volume = volumeObject is string s ? s : null;
             if (volume == null) continue;
             var volumeParts = volume.Split(':');
@@ -212,10 +266,27 @@ internal class DockerComposeConverter
             container.VolumeMounts.Add(volumeMount);
             podSpec.Volumes.Add(new V1Volume(volumeName, persistentVolumeClaim: new V1PersistentVolumeClaimVolumeSource(volumeName)));
         }
+
+        if (service.Value.Image.Contains("relay", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogInformation("Adding relay specific configuration");
+            container.Env ??= new List<V1EnvVar>();
+            container.Env.Add(new V1EnvVar
+            {
+                Name = "PORT",
+                Value = "3000"
+            });
+            container.Ports.Add(new V1ContainerPort
+            {
+                Name = "http",
+                ContainerPort = 3000
+            });
+        }
         
 
         if (service.Value.Image!.Contains("sentry", StringComparison.OrdinalIgnoreCase))
         {
+            _logger.LogInformation("Adding sentry specific configuration");
             podSpec.Volumes.Add(new V1Volume("sentry-config", secret:  new V1SecretVolumeSource(420, optional: false, secretName: "sentry-config")));
 
             // We don't mount to /data if it's already taken
@@ -251,6 +322,7 @@ internal class DockerComposeConverter
         
         if (service.Key == "web")
         {
+            _logger.LogInformation("Adding web specific configuration");
             var initContainer = GenerateSentryContainer("db-setup", sentryDeployment, new DockerService()
             {
                 Image = container.Image,
@@ -270,7 +342,7 @@ internal class DockerComposeConverter
 
     private V1Container GenerateSentryContainer(string name, SentryDeployment sentryDeployment, DockerService service)
     {
-        return GenerateContainer(name, sentryDeployment, service, "pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh");
+        return GenerateContainer(name, sentryDeployment, service, "pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh ");
     }
 
     private V1Container GenerateSnubaContainer(string name, SentryDeployment sentryDeployment, DockerService service)
@@ -287,11 +359,11 @@ internal class DockerComposeConverter
         {
             Name = name,
             Image = service.Image,
-            Command = new[] { "/bin/bash", "-c" },
-            Args = (new string[]
+            Command = commandPrefix == string.Empty ? null : new[] { "sh", "-ce" },
+            Args = service.Command == null ? null : new string[]
             {
-                commandPrefix
-            }.Concat((service.Command is string s ? new[]{s} : service.Command as IEnumerable<string>) ?? Array.Empty<string>()).ToArray()).Where(x => !string.IsNullOrWhiteSpace(x)).ToArray(),
+                commandPrefix + (service.Command is string s ? s : string.Join(" ", service.Command as IEnumerable<string> ?? Array.Empty<string>()))
+            },
             Env = service.Environment?.Select(x => new V1EnvVar
             {
                 Name = x.Key,
