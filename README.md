@@ -9,6 +9,25 @@ Currently this operator assumes that cert-manager is installed; however you can 
 
 For a full list of supported settings, see [SentryDeployment.cs](./Entities/SentryDeployment.cs).
 
+# Example config
+
+```yaml
+apiVersion: sentry.io/v1
+kind: SentryDeployment
+metadata:
+  name: sentry
+  namespace: sentry
+spec:
+  environment:
+    OPENAI_API_KEY: ''
+    SENTRY_EVENT_RETENTION_DAYS: '30'
+    SENTRY_MAIL_HOST: ''
+    REDIS_PORT: 6379
+    CLICKHOUSE_PORT: 9000
+    SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE: ''
+  version: 23.6.1
+```
+
 ## TODO:
 - [X] ~~Vroom vroom~~
 - [X] ~~Add more settings to the CRD to customize deployment~~
