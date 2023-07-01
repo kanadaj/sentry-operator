@@ -362,7 +362,7 @@ internal class DockerComposeConverter
             Image = service.Image,
             Command = commandPrefix == string.Empty ? null : new[] { "sh", "-ce" },
             Args = service.Command == null ? null : 
-                commandPrefix == string.Empty ? ((service.Command as IEnumerable<string>)?.ToArray() ?? new[]{service.Command as string}) :
+                commandPrefix == string.Empty ? ((service.Command as IEnumerable<string>)?.ToArray() ?? (service.Command as string)?.Split(" ")) :
                 (new string[]
                 {
                     commandPrefix + (service.Command is string s ? s : string.Join(" ", service.Command as IEnumerable<string> ?? Array.Empty<string>()))
