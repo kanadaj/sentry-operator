@@ -276,6 +276,7 @@ internal class DockerComposeConverter
                 Name = "PORT",
                 Value = "3000"
             });
+            container.Ports ??= new List<V1ContainerPort>();
             container.Ports.Add(new V1ContainerPort
             {
                 Name = "http",
@@ -360,10 +361,12 @@ internal class DockerComposeConverter
             Name = name,
             Image = service.Image,
             Command = commandPrefix == string.Empty ? null : new[] { "sh", "-ce" },
-            Args = service.Command == null ? null : new string[]
-            {
-                commandPrefix + (service.Command is string s ? s : string.Join(" ", service.Command as IEnumerable<string> ?? Array.Empty<string>()))
-            },
+            Args = service.Command == null ? null : 
+                commandPrefix == string.Empty ? ((service.Command as IEnumerable<string>)?.ToArray() ?? new[]{service.Command as string}) :
+                (new string[]
+                {
+                    commandPrefix + (service.Command is string s ? s : string.Join(" ", service.Command as IEnumerable<string> ?? Array.Empty<string>()))
+                }),
             Env = service.Environment?.Select(x => new V1EnvVar
             {
                 Name = x.Key,
