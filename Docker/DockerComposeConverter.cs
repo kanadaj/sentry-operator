@@ -486,7 +486,12 @@ internal class DockerComposeConverter
 
         if (service.Key == "geoipupdate")
         {
-            container.Command = new[] { "/usr/bin/geoipupdate", "-d", "/sentry", "-f", "/sentry/GeoIP.conf" };
+            container.Command = new[] { "/bin/sh", "-ce" };
+
+            container.Args = new[]
+            {
+                "touch crontab.tmp && echo '0 0 * * * /usr/bin/geoipupdate -d /sentry -f /sentry/GeoIP.conf' > crontab.tmp && crontab crontab.tmp && rm -rf crontab.tmp && /usr/sbin/crond -f -d 0"
+            };
             
             container.VolumeMounts.Add(new V1VolumeMount
             {
