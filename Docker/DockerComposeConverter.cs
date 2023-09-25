@@ -315,13 +315,11 @@ internal class DockerComposeConverter
         }
 
         _logger.LogInformation("Adding sentry-env");
-        container.EnvFrom = new List<V1EnvFromSource>
+        container.EnvFrom ??= new List<V1EnvFromSource>();
+        container.EnvFrom.Add(new V1EnvFromSource
         {
-            new V1EnvFromSource
-            {
-                SecretRef = new V1SecretEnvSource("sentry-env")
-            }
-        };
+            SecretRef = new V1SecretEnvSource("sentry-env")
+        });
 
         if (sentryDeployment.Spec.Environment != null)
         {
