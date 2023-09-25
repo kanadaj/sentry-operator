@@ -288,6 +288,12 @@ internal class DockerComposeConverter
                 Name = "http",
                 ContainerPort = 3000
             });
+            container.VolumeMounts.Add(new V1VolumeMount
+            {
+                Name = "relay-conf",
+                MountPath = "/work/.relay",
+            });
+            podSpec.Volumes.Add(new V1Volume("relay-conf", configMap: new V1ConfigMapVolumeSource(name: "relay-conf")));
         }
         
 
