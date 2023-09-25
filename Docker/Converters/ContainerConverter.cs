@@ -269,6 +269,7 @@ public abstract class ContainerConverter : IDockerContainerConverter
         return svc;
     }
 
+    // TODO: Move resource requests to the individual relevant converters
     protected virtual IDictionary<string, ResourceQuantity>? GetRequests(string name, SentryDeployment sentryDeployment)
     {
         return name switch
@@ -310,6 +311,7 @@ public abstract class ContainerConverter : IDockerContainerConverter
         };
     }
 
+    // TODO: Move resource requests to the individual relevant converters
     protected virtual IDictionary<string, ResourceQuantity>? GetLimits(string name, SentryDeployment sentryDeployment)
     {
         return name switch
