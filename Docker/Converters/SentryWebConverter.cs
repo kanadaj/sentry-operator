@@ -43,8 +43,7 @@ public class SentryWebConverter : SentryContainerConverter
             
         initContainer.Args = new List<string>
         {
-            "upgrade",
-            "--noinput",
+            "pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh upgrade --noinput",
         };
             
         return new List<V1Container>
