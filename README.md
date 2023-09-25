@@ -32,7 +32,7 @@ spec:
 ```
 
 # Dependencies
-This operator does not install the following depenedencies:
+This operator does **_not_** install the following depenedencies:
 - Redis
 - Clickhouse
 - Postgres
@@ -46,6 +46,13 @@ Sentry will look for the following Services and ports:
 - `clickhouse:9000`
 - `postgres:5432`
 - `kafka:9092`
+
+# Why?
+Over the past few years Sentry has grown enormous. The current self-hosted docker-compose file requires _50_ Docker containers (+1 for the SMTP).
+
+On a single node this is easy enough to install using docker-compose (although not very scalable), but on a Kubernetes cluster this is a bit more difficult. There are a few Helm charts available, but they are all out of date (typically made for Sentry 10) and don't support the latest version of Sentry.
+
+This operator aims to solve that problem by using the self-hosted docker-compose file to figure out what containers to install. This means that the operator will always be up to date with the latest version of Sentry.
 
 ## TODO:
 - [X] ~~Vroom vroom~~
