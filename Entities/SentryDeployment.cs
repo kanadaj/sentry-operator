@@ -38,6 +38,7 @@ public class SentryDeployment : CustomKubernetesEntity<SentryDeployment.SentryDe
     public class SentryDeploymentStatus
     {
         public string Status { get; set; } = string.Empty;
+        public string? Message { get; set; }
     }
 }
 
