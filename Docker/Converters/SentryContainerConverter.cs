@@ -8,11 +8,12 @@ public class SentryContainerConverter : ContainerConverter
 {
     public override bool CanConvert(string name, DockerService service)
     {
-        return service.Image.Contains("getsentry/sentry");
+        return service.Image.Contains("getsentry/sentry") || service.Image.Contains("sentry-self-hosted-local");
     }
 
     protected override V1Container GetBaseContainer(string name, DockerService service, SentryDeployment sentryDeployment)
     {
+        service.Image = $"getsentry/sentry:{sentryDeployment.Spec.GetVersion()}";
         var container = base.GetBaseContainer(name, service, sentryDeployment);
         
         if (sentryDeployment.Spec.Environment != null)
