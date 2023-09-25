@@ -440,6 +440,27 @@ internal class DockerComposeConverter
                 SubPath = "config.yml"
             });
         }
+
+        if (service.Key == "snuba-api")
+        {
+            var bootstrapContainer = GenerateSnubaContainer("snuba-bootstrap", sentryDeployment, new DockerService()
+            {
+                Image = container.Image,
+                Command = new[]{"bootstrap --force --no-migrate"},
+            });
+            
+            var migrationContainer = GenerateSnubaContainer("snuba-migration", sentryDeployment, new DockerService()
+            {
+                Image = container.Image,
+                Command = new[]{"migrations migrate --force"},
+            });
+            
+            podSpec.InitContainers = new List<V1Container>
+            {
+                bootstrapContainer,
+                migrationContainer
+            };
+        }
         
         if (service.Key == "web")
         {
