@@ -230,7 +230,6 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
                                         """.Replace("\r\n", "\n"), // Make sure we don't do Windows line endings on Linux!
                 }
             };
-            cronConfigMap.AddOwnerReference(entity.MakeOwnerReference());
             await _client.Create(cronConfigMap);
         }
         
@@ -267,7 +266,6 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
                 }
             };
             
-            configMap.AddOwnerReference(entity.MakeOwnerReference());
             await _client.Create(configMap);
         }
         
@@ -307,7 +305,6 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
                 }
             };
 
-            relayConfigMap.AddOwnerReference(entity.MakeOwnerReference());
             await _client.Create(relayConfigMap);
         }
 
