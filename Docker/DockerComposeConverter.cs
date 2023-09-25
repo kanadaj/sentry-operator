@@ -167,6 +167,12 @@ internal class DockerComposeConverter
             isCleanup = true;
             service.Value.Image = $"getsentry/sentry:{version}";
         }
+        if (service.Value.Image == "symbolicator-cleanup-self-hosted-local")
+        {
+            _logger.LogInformation("Converting service {ServiceName} to cleanup", service.Key);
+            //isCleanup = true;
+            service.Value.Image = $"getsentry/symbolicator:nightly";
+        }
         _logger.LogInformation("Generating pod spec for {ServiceName}", service.Key);
         var container = service.Value.Image!.Contains("/sentry", StringComparison.OrdinalIgnoreCase) ? GenerateSentryContainer(service.Key, sentryDeployment, service.Value) : GenerateSnubaContainer(service.Key, sentryDeployment, service.Value);
         var podSpec = new V1PodSpec
@@ -200,7 +206,7 @@ internal class DockerComposeConverter
                     DefaultMode = 420
                 }
             });
-            container.Command = new List<string>
+            container.Args = new List<string>
             {
                 "pip install -r /etc/sentry/requirements.txt && exec /entrypoint.sh"
             };
@@ -319,6 +325,14 @@ internal class DockerComposeConverter
                 MountPath = "/etc/sentry/config.yml",
                 SubPath = "config.yml"
             });
+        }
+
+        if (service.Key == "geoipupdate")
+        {
+            service.Value.Environment ??= new Dictionary<string, string>();
+            service.Value.Environment["GEOIPUPDATE_LICENSE_KEY"] = sentryDeployment.Spec.Environment["GEOIPUPDATE_LICENSE_KEY"];
+            service.Value.Environment["GEOIPUPDATE_ACCOUNT_ID"] = sentryDeployment.Spec.Environment["GEOIPUPDATE_ACCOUNT_ID"];
+            service.Value.Environment["GEOIPUPDATE_EDITION_IDS"] = sentryDeployment.Spec.Environment["GEOIPUPDATE_EDITION_IDS"];
         }
         
         if (service.Key == "web")
