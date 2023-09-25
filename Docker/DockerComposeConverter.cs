@@ -356,6 +356,14 @@ internal class DockerComposeConverter
                     SecretRef = new V1SecretEnvSource("sentry-env")
                 }
             };
+            podSpec.InitContainers = new List<V1Container>
+            {
+                initContainer
+            };
+            container.Args = new List<string>
+            {
+                "pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh run web"
+            };
         }
         
         return podSpec;
