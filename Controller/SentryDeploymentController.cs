@@ -99,7 +99,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
 
                     if (deployment.Metadata.Name == "snuba-api")
                     {
-                        await InstallKafkaTopics();
+                        await InstallKafkaTopics(entity);
                     }
                 }
             }
@@ -397,10 +397,31 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
             }, cancellationToken);
     }
 
-    private async Task<bool> InstallKafkaTopics()
+    private async Task<bool> InstallKafkaTopics(SentryDeployment entity)
     {
         const string bitnamiCommand = "/opt/bitnami/kafka/bin/kafka-topics.sh --create --bootstrap-server kafka:9092 --topic ";
-        const string kafkaTopics = "ingest-attachments ingest-transactions ingest-events ingest-replay-recordings profiles ingest-occurrences";
+        const string kafkaTopicsDefault = "ingest-attachments ingest-transactions ingest-events ingest-replay-recordings profiles ingest-occurrences";
+        var kafkaTopicsScriptUrl = $"https://raw.githubusercontent.com/getsentry/self-hosted/{entity.Spec.GetVersion()}/install/create-kafka-topics.sh";
+
+        string kafkaTopics;
+        try
+        {
+            var kafkaTopicsScriptRaw = await _httpClient.GetStringAsync(kafkaTopicsScriptUrl);
+        
+            // Find the line that starts with 'NEEDED_KAFKA_TOPICS=' and extract the topics surrounded by a "
+            var topicsRegex = new Regex(@"NEEDED_KAFKA_TOPICS=""(.*)""");
+            var topicsMatch = topicsRegex.Match(kafkaTopicsScriptRaw);
+            kafkaTopics = topicsMatch.Groups[1].Value;
+            if (string.IsNullOrWhiteSpace(kafkaTopics))
+            {
+                kafkaTopics = kafkaTopicsDefault;
+            }
+        }
+        catch
+        {
+            kafkaTopics = kafkaTopicsDefault;
+        }
+        
         var topics = kafkaTopics.Split(" ");
         
         var pods = await _client.List<V1Pod>(labelSelector: "app.kubernetes.io/managed-by=sentry-operator,app.kubernetes.io/name=kafka");
@@ -422,8 +443,8 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
                     {
                         using var sr = new StreamReader(@out);
                         using var srErr = new StreamReader(err);
-                        var output = await sr.ReadToEndAsync();
-                        var error = await srErr.ReadToEndAsync();
+                        var output = await sr.ReadToEndAsync(cancellationToken);
+                        var error = await srErr.ReadToEndAsync(cancellationToken);
                         if (!string.IsNullOrWhiteSpace(error))
                         {
                             _logger.LogError("Error creating Kafka topics: {Error}", error);
