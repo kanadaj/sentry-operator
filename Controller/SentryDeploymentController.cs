@@ -269,6 +269,37 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
             await _client.Create(configMap);
         }
         
+        var snubaEnvConfigMap = await _client.Get<V1ConfigMap>("snuba-env", entity.Namespace());
+        if (snubaEnvConfigMap == null)
+        {
+            snubaEnvConfigMap = new V1ConfigMap
+            {
+                Metadata = new V1ObjectMeta
+                {
+                    Name = "snuba-env",
+                    NamespaceProperty = entity.Namespace()
+                },
+                Data = new Dictionary<string, string>
+                {
+                    ["UWSGI_DIE_ON_TERM"] = "true",
+                    ["UWSGI_NEED_APP"] = "true",
+                    ["REDIS_PORT"] = "6379",
+                    ["CLICKHOUSE_PORT"] = "9000",
+                    ["SNUBA_SETTINGS"] = "docker",
+                    ["UWSGI_MAX_REQUESTS"] = "10000",
+                    ["UWSGI_IGNORE_WRITE_ERRORS"] = "true",
+                    ["REDIS_HOST"] = "redis",
+                    ["UWSGI_DISABLE_WRITE_EXCEPTION"] = "true",
+                    ["CLICKHOUSE_HOST"] = "clickhouse",
+                    ["UWSGI_ENABLE_THREADS"] = "true",
+                    ["UWSGI_DISABLE_LOGGING"] = "true",
+                    ["DEFAULT_BROKERS"] = "kafka-service:9092",
+                    ["UWSGI_IGNORE_SIGPIPE"] = "true"
+                }
+            };
+            await _client.Create(snubaEnvConfigMap);
+        }
+        
         await InitAndGetRelayConfigMap(entity);
     }
 
