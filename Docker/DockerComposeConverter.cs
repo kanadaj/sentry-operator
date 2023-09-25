@@ -18,7 +18,7 @@ public class DockerComposeConverter
     private readonly string[] _ignoredServices = new[]
     {
         "smtp",
-        "memcached",
+        //"memcached",
         "redis",
         "postgres",
         "clickhouse",
