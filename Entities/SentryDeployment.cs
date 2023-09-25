@@ -28,6 +28,11 @@ public class SentryDeployment : CustomKubernetesEntity<SentryDeployment.SentryDe
         public ResourceLimitConfig? Resources { get; set; }
         
         public SentryDeploymentCertificateConfig? Certificate { get; set; } 
+        
+        public string GetVersion()
+        {
+            return Version ?? "nightly";
+        }
     }
 
     public class SentryDeploymentStatus

@@ -32,14 +32,16 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
     private readonly IKubernetesClient _client;
     private readonly IDistributedCache _cache;
     private readonly IEventManager _manager;
-    
-    public SentryDeploymentController(ILogger<SentryDeploymentController> logger, IFinalizerManager<SentryDeployment> finalizerManager, IHttpClientFactory httpClientFactory, IKubernetesClient client, IDistributedCache cache, IEventManager manager)
+    private readonly DockerComposeConverter _dockerComposeConverter;
+
+    public SentryDeploymentController(ILogger<SentryDeploymentController> logger, IFinalizerManager<SentryDeployment> finalizerManager, IHttpClientFactory httpClientFactory, IKubernetesClient client, IDistributedCache cache, IEventManager manager, DockerComposeConverter dockerComposeConverter)
     {
         _logger = logger;
         _finalizerManager = finalizerManager;
         _client = client;
         _cache = cache;
         _manager = manager;
+        _dockerComposeConverter = dockerComposeConverter;
         _httpClient = httpClientFactory.CreateClient();
     }
 
@@ -50,7 +52,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
         _logger.LogInformation("Entity {Name} called {ReconcileAsyncName}", entity.Name(), nameof(ReconcileAsync));
         await _finalizerManager.RegisterFinalizerAsync<SentryDeploymentFinalizer>(entity);
 
-        var (deployments, services) = await FetchAndConvertDockerCompose(entity);
+        var resources = await FetchAndConvertDockerCompose(entity);
 
         var secret = await _client.Get<V1Secret>("sentry-env", entity.Namespace());
 
@@ -138,6 +140,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
         //     });
         // }
 
+        var services = resources.OfType<V1Service>().ToList();
         foreach (var service in services)
         {
             service.AddOwnerReference(entity.MakeOwnerReference());
@@ -159,7 +162,8 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
         }
 
         var actualDeployments = await _client.List<V1Deployment>(entity.Namespace(), labelSelector: $"app.kubernetes.io/managed-by=sentry-operator");
-        
+
+        var deployments = resources.OfType<V1Deployment>().ToList();
         foreach (var deployment in deployments)
         {
             deployment.AddOwnerReference(entity.MakeOwnerReference());
@@ -293,7 +297,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
         }
     }
 
-    private async Task<(V1Deployment[] Deployments, V1Service[] Services)> FetchAndConvertDockerCompose(SentryDeployment entity)
+    private async Task<List<IKubernetesObject<V1ObjectMeta>>> FetchAndConvertDockerCompose(SentryDeployment entity)
     {
         var dockerComposeUrl = DockerComposeUrl; 
         if (entity.Spec.DockerComposeUrl != null)
@@ -318,10 +322,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
             }
         }
         dockerComposeRaw = (entity.Spec.Config ?? new()).ReplaceVariables(dockerComposeRaw);
-        var dockerComposeConverter = new DockerComposeConverter(_logger);
-        var (deployments, services) = dockerComposeConverter.Convert(dockerComposeRaw, entity, entity.Spec.Version == "master" ? "nightly" : entity.Spec.Version ?? "nightly");
-        
-        return (deployments, services);
+        return _dockerComposeConverter.Convert(dockerComposeRaw, entity);
     }
 }
 

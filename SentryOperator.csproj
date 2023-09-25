@@ -12,6 +12,10 @@
     <PackageReference Include="Serilog.Extensions.Logging" Version="7.0.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="4.1.0" />
     <PackageReference Include="YamlDotNet" Version="13.1.1" />
+
   </ItemGroup>
+
+
+
 
 </Project>
