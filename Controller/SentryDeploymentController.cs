@@ -1,5 +1,6 @@
 ﻿using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using k8s;
 using k8s.Models;
 using KubeOps.KubernetesClient;
