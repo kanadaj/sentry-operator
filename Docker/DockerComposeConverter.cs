@@ -29,7 +29,7 @@ public class DockerComposeConverter
 
     private readonly ILogger _logger;
 
-    public DockerComposeConverter(ILogger logger, IEnumerable<IDockerContainerConverter> converters)
+    public DockerComposeConverter(ILogger<DockerComposeConverter> logger, IEnumerable<IDockerContainerConverter> converters)
     {
         _logger = logger;
         _converters = converters;
