@@ -534,7 +534,12 @@ internal class DockerComposeConverter
 
     private V1Container GenerateSnubaContainer(string name, SentryDeployment sentryDeployment, DockerService service)
     {
-        return GenerateContainer(name, sentryDeployment, service);
+        var container = GenerateContainer(name, sentryDeployment, service);
+
+        container.EnvFrom ??= new List<V1EnvFromSource>();
+        container.EnvFrom.Add(new V1EnvFromSource(new V1ConfigMapEnvSource("snuba-env")));
+        
+        return container;
     }
 
     private static V1Container GenerateContainer(string name, SentryDeployment sentryDeployment, DockerService service, string commandPrefix = "")
