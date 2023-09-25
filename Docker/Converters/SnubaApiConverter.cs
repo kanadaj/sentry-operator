@@ -48,4 +48,17 @@ public class SnubaApiConverter : ContainerConverter
             migrationContainer
         };
     }
+
+    protected override V1Container GetBaseContainer(string name, DockerService service, SentryDeployment sentryDeployment)
+    {
+        var container = base.GetBaseContainer(name, service, sentryDeployment);
+        
+        container.EnvFrom ??= new List<V1EnvFromSource>();
+        container.EnvFrom.Add(new V1EnvFromSource
+        {
+            SecretRef = new V1SecretEnvSource("sentry-env")
+        });
+        
+        return container;
+    }
 }
