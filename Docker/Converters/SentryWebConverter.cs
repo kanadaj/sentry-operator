@@ -1,4 +1,5 @@
-﻿using SentryOperator.Docker.Volume;
+﻿using k8s.Models;
+using SentryOperator.Docker.Volume;
 using SentryOperator.Entities;
 
 namespace SentryOperator.Docker.Converters;
@@ -17,5 +18,38 @@ public class SentryWebConverter : SentryContainerConverter
             yield return volume;
             knownNames.Add(volume.Name);
         }
+    }
+    
+    protected override V1PodSpec GeneratePodSpec(string name, DockerService service, SentryDeployment sentryDeployment)
+    {
+        var podSpec = base.GeneratePodSpec(name, service, sentryDeployment);
+
+        podSpec.InitContainers = GetInitContainers(service, sentryDeployment);
+        
+        podSpec.Containers[0].Args = new List<string>
+        {
+            "pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh run web"
+        };
+        
+        return podSpec;
+    }
+
+    private IList<V1Container> GetInitContainers(DockerService service, SentryDeployment sentryDeployment)
+    {
+        var initContainer = GetBaseContainer("init-db", new DockerService()
+        {
+            Image = service.Image,
+        }, sentryDeployment);
+            
+        initContainer.Args = new List<string>
+        {
+            "upgrade",
+            "--noinput",
+        };
+            
+        return new List<V1Container>
+        {
+            initContainer
+        };
     }
 }
