@@ -59,6 +59,12 @@ public class SnubaApiConverter : ContainerConverter
             SecretRef = new V1SecretEnvSource("sentry-env")
         });
         
+        container.EnvFrom.Add(new V1EnvFromSource
+        {
+            ConfigMapRef = new V1ConfigMapEnvSource("snuba-env")
+        });
+
+        
         return container;
     }
 }
