@@ -31,6 +31,22 @@ spec:
   version: 23.6.1
 ```
 
+# Dependencies
+This operator does not install the following depenedencies:
+- Redis
+- Clickhouse
+- Postgres
+- Kafka
+- Zookeeper
+
+Since these are all stateful services, it is recommended that you create these manually or use a dedicated operator to manage them.
+
+Sentry will look for the following Services and ports:
+- `redis:6379`
+- `clickhouse:9000`
+- `postgres:5432`
+- `kafka:9092`
+
 ## TODO:
 - [X] ~~Vroom vroom~~
 - [X] ~~Add more settings to the CRD to customize deployment~~
