@@ -36,7 +36,7 @@ spec:
 - [X] ~~Add more settings to the CRD to customize deployment~~
 - [ ] Save the copies of the older versions of docker-compose into the project so we can avoid pulling them from GitHub every time
 - [ ] Load local docker-compose.yml files if they exist instead of pulling from GitHub
-- [ ] Add example config
+- [X] ~~Add example config~~
 - [ ] Add HPA support
-- [ ] Check if certificate creating is still broken
+- [X] ~~Check if certificate creating is still broken~~
 - [ ] Only try installing the certificate if cert-manager is installed
