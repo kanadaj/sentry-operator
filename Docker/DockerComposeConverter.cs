@@ -178,6 +178,12 @@ internal class DockerComposeConverter
             //isCleanup = true;
             service.Value.Image = $"getsentry/symbolicator:nightly";
         }
+        if (service.Value.Image == "vroom-cleanup-self-hosted-local")
+        {
+            _logger.LogInformation("Converting service {ServiceName} to cleanup", service.Key);
+            //isCleanup = true;
+            service.Value.Image = $"getsentry/vroom:{version}";;
+        }
         
 
         if (service.Value.Image.Contains("geoipupdate"))
@@ -218,12 +224,93 @@ internal class DockerComposeConverter
                 {
                     Name = "sentry-cron",
                     Optional = false,
-                    DefaultMode = 530
+                    DefaultMode = 344
+                }
+            });
+            container.Command = new List<string>
+            {
+                "/bin/bash",
+                "-c"
+            };
+            container.Args = new List<string>
+            {
+                "apt-get update && apt-get install -y --no-install-recommends cron && rm -r /var/lib/apt/lists/* && pip install -r /etc/sentry/requirements.txt && exec /entrypoint.sh \"0 0 * * * gosu sentry sentry cleanup --days $SENTRY_EVENT_RETENTION_DAYS\""
+            };
+        }
+
+        if (service.Key == "symbolicator")
+        {
+            podSpec.Volumes.Add(new V1Volume("symbolicator-conf", configMap: new V1ConfigMapVolumeSource(name: "symbolicator-conf")));
+            container.VolumeMounts.Add(new V1VolumeMount
+            {
+                Name = "symbolicator-conf",
+                MountPath = "/etc/symbolicator/config.yml",
+                SubPath = "config.yml"
+            });
+        }
+
+        if (service.Key == "symbolicator-cleanup")
+        {
+            podSpec.Volumes.Add(new V1Volume("symbolicator-conf", configMap: new V1ConfigMapVolumeSource(name: "symbolicator-conf")));
+            container.VolumeMounts.Add(new V1VolumeMount
+            {
+                Name = "symbolicator-conf",
+                MountPath = "/etc/symbolicator/config.yml",
+                SubPath = "config.yml"
+            });
+            container.Command = new List<string>
+            {
+                "/bin/bash",
+                "-c"
+            };
+            container.VolumeMounts.Add(new V1VolumeMount
+            {
+                Name = "sentry-cron",
+                MountPath = "/entrypoint.sh",
+                SubPath = "entrypoint.sh"
+            });
+            podSpec.Volumes.Add(new V1Volume
+            {
+                Name = "sentry-cron",
+                ConfigMap = new V1ConfigMapVolumeSource
+                {
+                    Name = "sentry-cron",
+                    Optional = false,
+                    DefaultMode = 344
                 }
             });
             container.Args = new List<string>
             {
-                "pip install -r /etc/sentry/requirements.txt && exec /entrypoint.sh"
+                "apt-get update && apt-get install -y --no-install-recommends cron && rm -r /var/lib/apt/lists/* && exec /entrypoint.sh \"55 23 * * * gosu symbolicator symbolicator cleanup\""
+            };
+        }
+
+        if (service.Key == "vroom-cleanup")
+        {
+            container.Command = new List<string>
+            {
+                "/bin/bash",
+                "-c"
+            };
+            container.VolumeMounts.Add(new V1VolumeMount
+            {
+                Name = "sentry-cron",
+                MountPath = "/entrypoint.sh",
+                SubPath = "entrypoint.sh"
+            });
+            podSpec.Volumes.Add(new V1Volume
+            {
+                Name = "sentry-cron",
+                ConfigMap = new V1ConfigMapVolumeSource
+                {
+                    Name = "sentry-cron",
+                    Optional = false,
+                    DefaultMode = 344
+                }
+            });
+            container.Args = new List<string>
+            {
+                "apt-get update && apt-get install -y --no-install-recommends cron && rm -r /var/lib/apt/lists/* && exec /entrypoint.sh \"0 0 * * * find /var/lib/sentry-profiles -type f -mtime +$SENTRY_EVENT_RETENTION_DAYS -delete\""
             };
         }
 
