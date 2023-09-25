@@ -285,10 +285,10 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
     /// <returns></returns>
     private async Task<V1ConfigMap> InitAndGetRelayConfigMap(SentryDeployment entity)
     {
-        var relayConfigMap = await _client.Get<V1ConfigMap>("relay-config", entity.Namespace());
+        var relayConfigMap = await _client.Get<V1ConfigMap>("relay-conf", entity.Namespace());
         if (relayConfigMap == null)
         {
-            var configUrl = $"https://raw.githubusercontent.com/getsentry/relay/{entity.Spec.GetVersion()}/relay/config.example.yml";
+            var configUrl = $"https://raw.githubusercontent.com/getsentry/self-hosted/{entity.Spec.GetVersion()}/relay/config.example.yml";
 
             var configRaw = await _httpClient.GetStringAsync(configUrl);
 
@@ -296,7 +296,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
             {
                 Metadata = new V1ObjectMeta
                 {
-                    Name = "relay-config",
+                    Name = "relay-conf",
                     NamespaceProperty = entity.Namespace()
                 },
                 Data = new Dictionary<string, string>
