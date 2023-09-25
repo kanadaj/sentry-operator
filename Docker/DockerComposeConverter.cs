@@ -57,6 +57,16 @@ public class DockerComposeConverter
         return result;
     }
 
+    public DockerCompose Parse(string dockerComposeYaml)
+    {
+        var mergingParser = new MergingParser(new Parser(new StringReader(dockerComposeYaml)));
+        var dockerComposeFile = new DeserializerBuilder()
+            .Build()
+            .Deserialize<DockerCompose>(mergingParser);
+
+        return dockerComposeFile;
+    }
+
     // public (V1Deployment[] Deployments, V1Service[] Services) ConvertOld(string dockerComposeYaml, SentryDeployment sentryDeployment, string version = "nightly")
     // {
     //     var dockerCompose = Parse(dockerComposeYaml);
@@ -676,14 +686,4 @@ public class DockerComposeConverter
     //         _ => null
     //     };
     // }
-
-    public DockerCompose Parse(string dockerComposeYaml)
-    {
-        var mergingParser = new MergingParser(new Parser(new StringReader(dockerComposeYaml)));
-        var dockerComposeFile = new DeserializerBuilder()
-            .Build()
-            .Deserialize<DockerCompose>(mergingParser);
-
-        return dockerComposeFile;
-    }
 }
