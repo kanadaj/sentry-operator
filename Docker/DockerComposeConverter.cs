@@ -129,7 +129,8 @@ internal class DockerComposeConverter
             {
                 Metadata = new V1ObjectMeta
                 {
-                    Name = service,
+                    // We can't name our service "relay" because Relay itself will react to the service env var
+                    Name = service == "relay" ? "relay-service" : service,
                     NamespaceProperty = sentryDeployment.Namespace(),
                     Labels = new Dictionary<string, string>
                     {
@@ -149,6 +150,10 @@ internal class DockerComposeConverter
                             Port = port,
                             TargetPort = port,
                         }
+                    },
+                    Selector = new Dictionary<string, string>
+                    {
+                        {"app.kubernetes.io/name", service }
                     }
                 }
             };
@@ -173,6 +178,16 @@ internal class DockerComposeConverter
             //isCleanup = true;
             service.Value.Image = $"getsentry/symbolicator:nightly";
         }
+        
+
+        if (service.Value.Image.Contains("geoipupdate"))
+        {
+            service.Value.Environment ??= new Dictionary<string, string>();
+            service.Value.Environment["GEOIPUPDATE_LICENSE_KEY"] = sentryDeployment.Spec.Environment["GEOIPUPDATE_LICENSE_KEY"];
+            service.Value.Environment["GEOIPUPDATE_ACCOUNT_ID"] = sentryDeployment.Spec.Environment["GEOIPUPDATE_ACCOUNT_ID"];
+            service.Value.Environment["GEOIPUPDATE_EDITION_IDS"] = sentryDeployment.Spec.Environment["GEOIPUPDATE_EDITION_IDS"];
+        }
+        
         _logger.LogInformation("Generating pod spec for {ServiceName}", service.Key);
         var container = service.Value.Image!.Contains("/sentry", StringComparison.OrdinalIgnoreCase) ? GenerateSentryContainer(service.Key, sentryDeployment, service.Value) : GenerateSnubaContainer(service.Key, sentryDeployment, service.Value);
         var podSpec = new V1PodSpec
@@ -276,6 +291,12 @@ internal class DockerComposeConverter
         if (service.Value.Image.Contains("relay", StringComparison.OrdinalIgnoreCase))
         {
             _logger.LogInformation("Adding relay specific configuration");
+            podSpec.Volumes.Add(new V1Volume("geoip", persistentVolumeClaim: new V1PersistentVolumeClaimVolumeSource("geoip")));
+            container.VolumeMounts.Add(new V1VolumeMount
+            {
+                Name = "geoip",
+                MountPath = "/geoip"
+            });
             container.Env ??= new List<V1EnvVar>();
             container.Env.Add(new V1EnvVar
             {
@@ -291,7 +312,7 @@ internal class DockerComposeConverter
             container.VolumeMounts.Add(new V1VolumeMount
             {
                 Name = "relay-conf",
-                MountPath = "/work/.relay",
+                MountPath = "/work/.relay"
             });
             podSpec.Volumes.Add(new V1Volume("relay-conf", configMap: new V1ConfigMapVolumeSource(name: "relay-conf")));
         }
@@ -331,14 +352,6 @@ internal class DockerComposeConverter
                 MountPath = "/etc/sentry/config.yml",
                 SubPath = "config.yml"
             });
-        }
-
-        if (service.Key == "geoipupdate")
-        {
-            service.Value.Environment ??= new Dictionary<string, string>();
-            service.Value.Environment["GEOIPUPDATE_LICENSE_KEY"] = sentryDeployment.Spec.Environment["GEOIPUPDATE_LICENSE_KEY"];
-            service.Value.Environment["GEOIPUPDATE_ACCOUNT_ID"] = sentryDeployment.Spec.Environment["GEOIPUPDATE_ACCOUNT_ID"];
-            service.Value.Environment["GEOIPUPDATE_EDITION_IDS"] = sentryDeployment.Spec.Environment["GEOIPUPDATE_EDITION_IDS"];
         }
         
         if (service.Key == "web")
@@ -383,7 +396,21 @@ internal class DockerComposeConverter
                 "pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh run web"
             };
         }
-        
+
+        if (service.Key == "geoipupdate")
+        {
+            container.Command = new[] { "/usr/bin/geoipupdate", "-d", "/sentry", "-f", "/sentry/GeoIP.conf" };
+            
+            container.VolumeMounts.Add(new V1VolumeMount
+            {
+                Name = "geoip-conf",
+                MountPath = "/sentry/GeoIP.conf",
+                SubPath = "GeoIP.conf"
+            });
+            
+            podSpec.Volumes.Add(new V1Volume("geoip-conf", configMap: new V1ConfigMapVolumeSource(name: "geoip-conf")));
+        }
+
         return podSpec;
     }
 
