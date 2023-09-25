@@ -218,7 +218,7 @@ internal class DockerComposeConverter
                 {
                     Name = "sentry-cron",
                     Optional = false,
-                    DefaultMode = 420
+                    DefaultMode = 530
                 }
             });
             container.Args = new List<string>
