@@ -356,6 +356,24 @@ internal class DockerComposeConverter
                     SecretRef = new V1SecretEnvSource("sentry-env")
                 }
             };
+            initContainer.VolumeMounts.Add(new V1VolumeMount
+            {
+                Name = "sentry-config",
+                MountPath = "/etc/sentry/sentry.conf.py",
+                SubPath = "sentry.conf.py"
+            });
+            initContainer.VolumeMounts.Add(new V1VolumeMount
+            {
+                Name = "sentry-config",
+                MountPath = "/etc/sentry/requirements.txt",
+                SubPath = "requirements.txt"
+            });
+            initContainer.VolumeMounts.Add(new V1VolumeMount
+            {
+                Name = "sentry-config",
+                MountPath = "/etc/sentry/config.yml",
+                SubPath = "config.yml"
+            });
             podSpec.InitContainers = new List<V1Container>
             {
                 initContainer
