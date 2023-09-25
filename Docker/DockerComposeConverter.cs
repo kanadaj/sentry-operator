@@ -34,7 +34,7 @@ public class DockerComposeConverter
         SentryDeployment sentryDeployment)
     {
         var dockerCompose = Parse(dockerComposeYaml);
-        List<IKubernetesObject<V1ObjectMeta>> result = new List<IKubernetesObject<V1ObjectMeta>>(); 
+        var result = new List<IKubernetesObject<V1ObjectMeta>>(); 
         foreach (var service in dockerCompose.Services!)
         {
             if (_ignoredServices.Contains(service.Key))
