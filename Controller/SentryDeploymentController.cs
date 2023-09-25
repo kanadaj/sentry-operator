@@ -96,6 +96,11 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
                 {
                     deployment.Metadata.ResourceVersion = actualDeployment.Metadata.ResourceVersion;
                     await _client.Update(deployment);
+
+                    if (deployment.Metadata.Name == "snuba-api")
+                    {
+                        await InstallKafkaTopics();
+                    }
                 }
             }
         }
@@ -390,6 +395,47 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
                 configMap.Data["credentials.json"] = credentials;
                 await _client.Update(configMap);
             }, cancellationToken);
+    }
+
+    private async Task<bool> InstallKafkaTopics()
+    {
+        const string bitnamiCommand = "/opt/bitnami/kafka/bin/kafka-topics.sh --create --bootstrap-server kafka:9092 --topic ";
+        const string kafkaTopics = "ingest-attachments ingest-transactions ingest-events ingest-replay-recordings profiles ingest-occurrences";
+        var topics = kafkaTopics.Split(" ");
+        
+        var pods = await _client.List<V1Pod>(labelSelector: "app.kubernetes.io/managed-by=sentry-operator,app.kubernetes.io/name=kafka");
+        var image = pods.First().Spec.Containers.First().Image;
+
+        if (image.Contains("bitnami"))
+        {
+            var cancellationToken = new CancellationTokenSource(TimeSpan.FromSeconds(30)).Token;
+            foreach (var topic in topics)
+            {
+                await _client.ApiClient.NamespacedPodExecAsync(
+                    pods.First().Name(),
+                    pods.First().Namespace(),
+                    pods.First().Spec.Containers.First().Name,
+                    new List<string>
+                    {
+                        bitnamiCommand + topic
+                    }, false, async (@in, @out, err) =>
+                    {
+                        using var sr = new StreamReader(@out);
+                        using var srErr = new StreamReader(err);
+                        var output = await sr.ReadToEndAsync();
+                        var error = await srErr.ReadToEndAsync();
+                        if (!string.IsNullOrWhiteSpace(error))
+                        {
+                            _logger.LogError("Error creating Kafka topics: {Error}", error);
+                            return;
+                        }
+                        _logger.LogInformation("Kafka topics created: {Output}", output);
+                    }, cancellationToken);
+            }
+            
+            return true;
+        }
+        else return false;
     }
 
     public Task StatusModifiedAsync(SentryDeployment entity)
