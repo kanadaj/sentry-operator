@@ -56,12 +56,16 @@ public class SentryContainerConverter : ContainerConverter
 
     protected override IEnumerable<VolumeRef> GetVolumeData(DockerService service, SentryDeployment sentryDeployment)
     {
-        foreach(var volume in base.GetVolumeData(service, sentryDeployment))
+        var vols = base.GetVolumeData(service, sentryDeployment).ToList();
+        foreach(var volume in vols)
         {
             yield return volume;
         }
 
-        yield return new VolumeRef("sentry-data", "/data");
+        if (vols.All(x => x.Name != "sentry-data"))
+        {
+            yield return new VolumeRef("sentry-data", "/data");
+        }
     }
 
     protected override IEnumerable<V1Volume> GetVolumes(DockerService service, SentryDeployment sentryDeployment)
