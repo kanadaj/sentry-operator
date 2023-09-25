@@ -48,6 +48,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
     public async Task<ResourceControllerResult?> ReconcileAsync(SentryDeployment entity)
     {
         entity.Status.Status = "Updating";
+        entity.Status.Message = "Updating Sentry deployment";
         await _client.UpdateStatus(entity);
         _logger.LogInformation("Entity {Name} called {ReconcileAsyncName}", entity.Name(), nameof(ReconcileAsync));
         await _finalizerManager.RegisterFinalizerAsync<SentryDeploymentFinalizer>(entity);
@@ -124,6 +125,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
 
         entity = (await _client.Get<SentryDeployment>(entity.Name(), entity.Namespace()))!;
         entity.Status.Status = "Ready";
+        entity.Status.Message = "Sentry deployment is ready";
         await _client.UpdateStatus(entity);
         //return ResourceControllerResult.RequeueEvent(TimeSpan.FromSeconds(15));
         return null;
@@ -173,6 +175,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
                 _logger.LogError(e, "Error creating certificate");
                 
                 entity.Status.Status = "Error";
+                entity.Status.Message = "Error creating certificate: " + e.Message;
                 await _client.UpdateStatus(entity);
                 await _manager.PublishAsync(entity, "Error", "Error creating certificate: " + e.Message);
                 return ResourceControllerResult.RequeueEvent(TimeSpan.FromSeconds(15));
@@ -390,6 +393,12 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
                 if (!string.IsNullOrWhiteSpace(error))
                 {
                     _logger.LogError("Error generating credentials: {Error}", error);
+                    
+                    entity = (await _client.Get<SentryDeployment>(entity.Name(), entity.Namespace()))!;
+                    entity.Status.Status = "Error";
+                    entity.Status.Message = error;
+                    await _client.UpdateStatus(entity);
+                    
                     return;
                 }
                 configMap.Data["credentials.json"] = credentials;
