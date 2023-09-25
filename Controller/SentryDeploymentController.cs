@@ -54,91 +54,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
 
         var resources = await FetchAndConvertDockerCompose(entity);
 
-        var secret = await _client.Get<V1Secret>("sentry-env", entity.Namespace());
-
-        var config = entity.Spec.Config ?? new();
-        if (secret == null)
-        {
-            var secretKeyBytes = RandomNumberGenerator.GetBytes(64);
-            var secretKey = Convert.ToBase64String(secretKeyBytes);
-            
-            await _client.Create(new V1Secret()
-            {
-                Metadata = new V1ObjectMeta
-                {
-                    Name = "sentry-env",
-                    NamespaceProperty = entity.Namespace()
-                },
-                StringData = new Dictionary<string, string>
-                {
-                    ["SENTRY_EVENT_RETENTION_DAYS"] = config.EventRetentionDays.ToString(),
-                    ["SENTRY_SECRET_KEY"] = secretKey,
-                    ["SENTRY_VSTS_CLIENT_ID"] = "",
-                    ["SENTRY_VSTS_CLIENT_SECRET"] = "",
-                    ["SNUBA"] = "http://snuba-api:1218"
-                }
-            });
-        }
-        
-        var cronConfigMap = await _client.Get<V1ConfigMap>("sentry-cron", entity.Namespace());
-        if (cronConfigMap == null)
-        {
-            cronConfigMap = new V1ConfigMap
-            {
-                Metadata = new V1ObjectMeta
-                {
-                    Name = "sentry-cron",
-                    NamespaceProperty = entity.Namespace()
-                },
-                Data = new Dictionary<string, string>
-                {
-                    ["entrypoint.sh"] = """
-                    declare -p | grep -Ev 'BASHOPTS|BASH_VERSINFO|EUID|PPID|SHELLOPTS|UID' >/container.env
-
-                    { for cron_job in "$@"; do echo -e "SHELL=/bin/bash
-                    BASH_ENV=/container.env
-                    ${cron_job} > /proc/1/fd/1 2>/proc/1/fd/2"; done; } |
-                      sed --regexp-extended 's/\\(.)/\1/g' |
-                      crontab -
-                    crontab -l
-                    exec cron -f -l -L 15
-                    """.Replace("\r\n", "\n"), // Make sure we don't do Windows line endings on Linux!
-                }
-            };
-            cronConfigMap.AddOwnerReference(entity.MakeOwnerReference());
-            await _client.Create(cronConfigMap);
-        }
-        // var snubaEnvConfigMap = await _client.Get<V1ConfigMap>("snuba-env", entity.Namespace());
-        //
-        // if (snubaEnvConfigMap == null)
-        // {
-        //     await _client.Create(new V1ConfigMap()
-        //     {
-        //         Metadata = new V1ObjectMeta
-        //         {
-        //             Name = "snuba-env",
-        //             NamespaceProperty = entity.Namespace()
-        //         },
-        //         Data = new Dictionary<string, string>
-        //         {
-        //             ["CLICKHOUSE_HOST"] = "clickhouse",
-        //             ["CLICKHOUSE_PORT"] = "9000",
-        //             ["DEFAULT_BROKERS"] = "kafka-service:9092",
-        //             ["REDIS_HOST"] = "redis",
-        //             ["REDIS_PORT"] = "6379",
-        //             ["SNUBA_SETTINGS"] = "docker",
-        //             ["UWSGI_DIE_ON_TERM"] = "true",
-        //             ["UWSGI_DISABLE_LOGGING"] = "true",
-        //             ["UWSGI_DISABLE_WRITE_EXCEPTION"] = "true",
-        //             ["UWSGI_ENABLE_THREADS"] = "true",
-        //             ["UWSGI_IGNORE_SIGPIPE"] = "true",
-        //             ["UWSGI_IGNORE_WRITE_ERRORS"] = "true",
-        //             ["UWSGI_MAX_REQUESTS"] = "10000",
-        //             ["UWSGI_NEED_APP"] = "true"
-        //             
-        //         }
-        //     });
-        // }
+        await AddDefaultConfig(entity);
 
         var services = resources.OfType<V1Service>().ToList();
         foreach (var service in services)
@@ -192,13 +108,24 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
             }
         }
 
-        if (!(entity.Spec.Certificate?.Install ?? true))
+        if ((entity.Spec.Certificate?.Install ?? true))
         {
-            entity.Status.Status = "Ready";
-            await _client.UpdateStatus(entity);
-            return null;
+            var result = await AddCertManagerConfig(entity);
+            if (result != null)
+            {
+                return result;
+            }
         }
-        
+
+        entity = (await _client.Get<SentryDeployment>(entity.Name(), entity.Namespace()))!;
+        entity.Status.Status = "Ready";
+        await _client.UpdateStatus(entity);
+        //return ResourceControllerResult.RequeueEvent(TimeSpan.FromSeconds(15));
+        return null;
+    }
+
+    private async Task<ResourceControllerResult?> AddCertManagerConfig(SentryDeployment entity)
+    {
         var certName = entity.Spec.Certificate?.CertificateCRDName ?? (entity.Name() + "-certificate");
         var certificate = await _client.Get<Certificate>(certName, entity.Namespace());
         _logger.LogInformation("Certificate {CertificateName} found: {CertificateFound}", certName, certificate != null);
@@ -247,11 +174,194 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
             }
         }
 
-        entity = (await _client.Get<SentryDeployment>(entity.Name(), entity.Namespace()))!;
-        entity.Status.Status = "Ready";
-        await _client.UpdateStatus(entity);
-        //return ResourceControllerResult.RequeueEvent(TimeSpan.FromSeconds(15));
         return null;
+    }
+
+    private async Task AddDefaultConfig(SentryDeployment entity)
+    {
+        var secret = await _client.Get<V1Secret>("sentry-env", entity.Namespace());
+
+        var config = entity.Spec.Config ?? new();
+        if (secret == null)
+        {
+            var secretKeyBytes = RandomNumberGenerator.GetBytes(64);
+            var secretKey = Convert.ToBase64String(secretKeyBytes);
+
+            await _client.Create(new V1Secret()
+            {
+                Metadata = new V1ObjectMeta
+                {
+                    Name = "sentry-env",
+                    NamespaceProperty = entity.Namespace()
+                },
+                StringData = new Dictionary<string, string>
+                {
+                    ["SENTRY_EVENT_RETENTION_DAYS"] = config.EventRetentionDays.ToString(),
+                    ["SENTRY_SECRET_KEY"] = secretKey,
+                    ["SENTRY_VSTS_CLIENT_ID"] = "",
+                    ["SENTRY_VSTS_CLIENT_SECRET"] = "",
+                    ["SNUBA"] = "http://snuba-api:1218"
+                }
+            });
+        }
+
+        var cronConfigMap = await _client.Get<V1ConfigMap>("sentry-cron", entity.Namespace());
+        if (cronConfigMap == null)
+        {
+            cronConfigMap = new V1ConfigMap
+            {
+                Metadata = new V1ObjectMeta
+                {
+                    Name = "sentry-cron",
+                    NamespaceProperty = entity.Namespace()
+                },
+                Data = new Dictionary<string, string>
+                {
+                    ["entrypoint.sh"] = """
+                                        declare -p | grep -Ev 'BASHOPTS|BASH_VERSINFO|EUID|PPID|SHELLOPTS|UID' >/container.env
+
+                                        { for cron_job in "$@"; do echo -e "SHELL=/bin/bash
+                                        BASH_ENV=/container.env
+                                        ${cron_job} > /proc/1/fd/1 2>/proc/1/fd/2"; done; } |
+                                          sed --regexp-extended 's/\\(.)/\1/g' |
+                                          crontab -
+                                        crontab -l
+                                        exec cron -f -l -L 15
+                                        """.Replace("\r\n", "\n"), // Make sure we don't do Windows line endings on Linux!
+                }
+            };
+            cronConfigMap.AddOwnerReference(entity.MakeOwnerReference());
+            await _client.Create(cronConfigMap);
+        }
+        
+        // Check if sentry-config exists; if it doesn't, download config from GitHub and create ConfigMap with config.yml, docker-entrypoint.sh, requirements.txt and sentry.conf.py
+        var configMap = await _client.Get<V1Secret>("sentry-config", entity.Namespace());
+        if (configMap == null)
+        {
+            var configUrl = $"https://raw.githubusercontent.com/getsentry/self-hosted/{entity.Spec.GetVersion()}/sentry/config.example.yml";
+            var entrypointUrl = $"https://raw.githubusercontent.com/getsentry/self-hosted/{entity.Spec.GetVersion()}/sentry/entrypoint.sh";
+            var sentryConfPyUrl = $"https://raw.githubusercontent.com/getsentry/self-hosted/{entity.Spec.GetVersion()}/sentry/sentry.conf.example.py";
+            
+            var configRaw = await _httpClient.GetStringAsync(configUrl);
+            var entrypointRaw = await _httpClient.GetStringAsync(entrypointUrl);
+            var sentryConfPyRaw = await _httpClient.GetStringAsync(sentryConfPyUrl);
+            
+            // Generate a 50 character secret key
+            // Allowed characters: "a-z0-9@#%^&*(-_=+)"
+            var secretKey = GenerateSecretKey();
+            configRaw = configRaw.Replace("!!changeme!!", secretKey);
+            
+            configMap = new V1Secret
+            {
+                Metadata = new V1ObjectMeta
+                {
+                    Name = "sentry-config",
+                    NamespaceProperty = entity.Namespace()
+                },
+                StringData = new Dictionary<string, string>
+                {
+                    ["config.yml"] = configRaw,
+                    ["entrypoint.sh"] = entrypointRaw,
+                    ["sentry.conf.py"] = sentryConfPyRaw,
+                    ["requirements.txt"] = ""
+                }
+            };
+            
+            configMap.AddOwnerReference(entity.MakeOwnerReference());
+            await _client.Create(configMap);
+        }
+        
+        await InitAndGetRelayConfigMap(entity);
+    }
+
+    private string GenerateSecretKey()
+    {
+        var bytes = RandomNumberGenerator.GetBytes(256);
+        return Convert.ToBase64String(bytes).Substring(0, 50);
+    }
+
+    /// <summary>
+    /// Check if relay-conf exists; if it doesn't, download config from GitHub and create config.yml
+    /// </summary>
+    /// <param name="entity"></param>
+    /// <returns></returns>
+    private async Task<V1ConfigMap> InitAndGetRelayConfigMap(SentryDeployment entity)
+    {
+        var relayConfigMap = await _client.Get<V1ConfigMap>("relay-config", entity.Namespace());
+        if (relayConfigMap == null)
+        {
+            var configUrl = $"https://raw.githubusercontent.com/getsentry/relay/{entity.Spec.GetVersion()}/relay/config.example.yml";
+
+            var configRaw = await _httpClient.GetStringAsync(configUrl);
+
+            relayConfigMap = new V1ConfigMap
+            {
+                Metadata = new V1ObjectMeta
+                {
+                    Name = "relay-config",
+                    NamespaceProperty = entity.Namespace()
+                },
+                Data = new Dictionary<string, string>
+                {
+                    ["config.yml"] = configRaw
+                }
+            };
+
+            relayConfigMap.AddOwnerReference(entity.MakeOwnerReference());
+            await _client.Create(relayConfigMap);
+        }
+
+        _ = Task.Run(() => WaitForRelayAndGenerateCredentials(entity));
+        
+        return relayConfigMap;
+    }
+
+    private async Task WaitForRelayAndGenerateCredentials(SentryDeployment entity)
+    {
+        var pods = await _client.List<V1Pod>(entity.Namespace(), labelSelector: $"app.kubernetes.io/managed-by=sentry-operator,app.kubernetes.io/name=relay");
+        var pod = pods.First();
+        while (pod.Status.Phase != "Running")
+        {
+            await Task.Delay(TimeSpan.FromSeconds(5));
+            pods = await _client.List<V1Pod>(entity.Namespace(), labelSelector: $"app.kubernetes.io/managed-by=sentry-operator,app.kubernetes.io/name=relay");
+            pod = pods.First();
+        }
+
+        await GenerateRelayCredentials(entity);
+    }
+
+    public async Task GenerateRelayCredentials(SentryDeployment entity)
+    {
+        var configMap = await InitAndGetRelayConfigMap(entity);
+        
+        // Find relay pod by label
+        var pods = await _client.List<V1Pod>(entity.Namespace(), labelSelector: $"app.kubernetes.io/managed-by=sentry-operator,app.kubernetes.io/name=relay");
+        var pod = pods.First();
+
+        // Timeout after 30 seconds with cancellation token
+        var cancellationToken = new CancellationTokenSource(TimeSpan.FromSeconds(30)).Token;
+        
+        await _client.ApiClient.NamespacedPodExecAsync(
+            pod.Name(),
+            pod.Namespace(),
+            "relay",
+            new List<string>
+            {
+                "relay credentials generate --stdout"
+            }, false, async (@in, @out, err) =>
+            {
+                using var sr = new StreamReader(@out);
+                using var srErr = new StreamReader(err);
+                var credentials = await sr.ReadToEndAsync(cancellationToken);
+                var error = await srErr.ReadToEndAsync(cancellationToken);
+                if (!string.IsNullOrWhiteSpace(error))
+                {
+                    _logger.LogError("Error generating credentials: {Error}", error);
+                    return;
+                }
+                configMap.Data["credentials.json"] = credentials;
+                await _client.Update(configMap);
+            }, cancellationToken);
     }
 
     public Task StatusModifiedAsync(SentryDeployment entity)

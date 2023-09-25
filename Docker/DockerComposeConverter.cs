@@ -10,6 +10,11 @@ namespace SentryOperator.Docker;
 public class DockerComposeConverter
 {
     private readonly IEnumerable<IDockerContainerConverter> _converters;
+    
+    /// <summary>
+    /// These services should be managed by the user and not by the operator because they require external resources and tuning.
+    /// An external operator may be used for ease of use. For this reason, this operator will not manage these services.
+    /// </summary>
     private readonly string[] _ignoredServices = new[]
     {
         "smtp",
