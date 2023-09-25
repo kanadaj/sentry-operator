@@ -1,7 +1,7 @@
 # sentry-operator
 A Kubernetes operator written in .NET that uses the self-hosted docker-compose.yml as the ground truth
 
-Images are under kanadaj/sentry-operator on docker.io.
+Images are under `kanadaj/sentry-operator` on [docker.io](https://hub.docker.com/r/kanadaj/sentry-operator).
 
 See [deploy.yaml](./deploy.yaml) for a deployment manifest. The CRD definition may not be up to date; see [config/crds](./config/crds) for the latest version generated automatically.
 
