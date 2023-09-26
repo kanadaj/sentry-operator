@@ -105,9 +105,16 @@ web-7b865dcb88-pnk72                                            1/1     Running 
 worker-7ff67c8fd8-5nrrg                                         1/1     Running     0              24m
 ```
 
-On a single node this is easy enough to install using docker-compose (although not very scalable), but on a Kubernetes cluster this is a bit more difficult. There are a few Helm charts available, but they are all out of date (typically made for Sentry 10) and don't support the latest version of Sentry.
+On a single node this is easy enough to install using docker-compose (although not very scalable), but on a 
+Kubernetes cluster this is a bit more difficult. There are a few Helm charts available, 
+but they are all out of date (typically made for Sentry 10) and don't support the latest version of Sentry.
 
-This operator aims to solve that problem by using the self-hosted docker-compose file to figure out what containers to install. This means that the operator will always be up to date with the latest version of Sentry.
+This operator aims to solve that problem by using the self-hosted docker-compose file to figure out what 
+containers to install. This means that the operator will always be up to date with the latest version of Sentry.
+
+If a new version of sentry introduces new configuration that has to be made, it's easy enough to 
+accommodate it by using the existing converters in `/Docker/Converters` to manipulate the resulting Pods,
+or by adding a new converter.
 
 ## TODO:
 - [X] ~~Vroom vroom~~
