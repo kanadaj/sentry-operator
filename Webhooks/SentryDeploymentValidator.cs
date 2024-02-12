@@ -18,7 +18,7 @@ public class SentryDeploymentValidator : IValidationWebhook<SentryDeployment>
         if (newEntity.Spec.Version != null)
         {
             // Sentry versions are in the format of 21.5.0, 21.5.1, 21.5.2, etc.
-            if (!Regex.IsMatch(newEntity.Spec.Version, @"^\d+\.\d+\.\d+$"))
+            if (!Regex.IsMatch(newEntity.Spec.Version, @"^(nightly)|(\d+\.\d+\.\d+)$"))
             {
                 return ValidationResult.Fail(StatusCodes.Status400BadRequest, "Version must be in the format of 21.5.0, 21.5.1, 21.5.2, etc.");
             }

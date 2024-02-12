@@ -535,7 +535,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
                 });
             }
         }
-        dockerComposeRaw = (entity.Spec.Config ?? new()).ReplaceVariables(dockerComposeRaw);
+        dockerComposeRaw = (entity.Spec.Config ?? new()).ReplaceVariables(dockerComposeRaw, entity.Spec.Version ?? "nightly");
         return _dockerComposeConverter.Convert(dockerComposeRaw, entity);
     }
 }
