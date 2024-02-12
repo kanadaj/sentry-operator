@@ -1,4 +1,5 @@
-﻿using SentryOperator.Docker.Volume;
+﻿using k8s.Models;
+using SentryOperator.Docker.Volume;
 using SentryOperator.Entities;
 
 namespace SentryOperator.Docker.Converters;
