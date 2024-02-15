@@ -63,7 +63,7 @@ public class SentryDeploymentCertificateConfig
     public string[] CustomHosts { get; set; } = Array.Empty<string>();
 }
 
-public class ResourceLimitConfig
+public class ResourceLimitConfig : Dictionary<string, V1ResourceRequirements>
 {
     public V1ResourceRequirements? Web { get; set; }
     public V1ResourceRequirements? Worker { get; set; }
