@@ -272,6 +272,11 @@ public abstract class ContainerConverter : IDockerContainerConverter
     // TODO: Move resource requests to the individual relevant converters
     protected virtual IDictionary<string, ResourceQuantity>? GetRequests(string name, SentryDeployment sentryDeployment)
     {
+        if ((sentryDeployment.Spec.Resources?.TryGetValue(name, out var resource) ?? false) && resource.Requests != null)
+        {
+            return resource.Requests;
+        }
+        
         return name switch
         {
             "web" => sentryDeployment.Spec.Resources?.Web?.Requests ?? null,
@@ -314,6 +319,11 @@ public abstract class ContainerConverter : IDockerContainerConverter
     // TODO: Move resource requests to the individual relevant converters
     protected virtual IDictionary<string, ResourceQuantity>? GetLimits(string name, SentryDeployment sentryDeployment)
     {
+        if ((sentryDeployment.Spec.Resources?.TryGetValue(name, out var resource) ?? false) && resource.Limits != null)
+        {
+            return resource.Limits;
+        }
+        
         return name switch
         {
             "web" => sentryDeployment.Spec.Resources?.Web?.Limits ?? null,
@@ -325,6 +335,12 @@ public abstract class ContainerConverter : IDockerContainerConverter
                 { { "cpu", new ResourceQuantity("50m") }, { "memory", new ResourceQuantity("200Mi") }, },
             "relay" => sentryDeployment.Spec.Resources?.Relay?.Limits ?? new Dictionary<string, ResourceQuantity>
                 { { "cpu", new ResourceQuantity("100m") }, { "memory", new ResourceQuantity("1Gi") }, },
+            _ when name.Contains("attachments-consumer") => sentryDeployment.Spec.Resources?.Consumer?.Limits ??
+                                                new Dictionary<string, ResourceQuantity>
+                                                {
+                                                    { "cpu", new ResourceQuantity("100m") },
+                                                    { "memory", new ResourceQuantity("2Gi") },
+                                                },
             _ when name.Contains("consumer") => sentryDeployment.Spec.Resources?.Consumer?.Limits ??
                                                 new Dictionary<string, ResourceQuantity>
                                                 {
@@ -334,7 +350,7 @@ public abstract class ContainerConverter : IDockerContainerConverter
             _ when name.Contains("ingest") => sentryDeployment.Spec.Resources?.Ingest?.Limits ??
                                               new Dictionary<string, ResourceQuantity>
                                               {
-                                                  { "cpu", new ResourceQuantity("50m") },
+                                                  { "cpu", new ResourceQuantity("100m") },
                                                   { "memory", new ResourceQuantity("500Mi") },
                                               },
             _ when name.Contains("forwarder") => sentryDeployment.Spec.Resources?.Forwarder?.Limits ??
