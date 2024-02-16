@@ -47,23 +47,48 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
 
     public async Task<ResourceControllerResult?> ReconcileAsync(SentryDeployment entity)
     {
-        entity.Status.Status = "Updating";
-        entity.Status.Message = "Updating Sentry deployment";
-        await _client.UpdateStatus(entity);
         _logger.LogInformation("Entity {Name} called {ReconcileAsyncName}", entity.Name(), nameof(ReconcileAsync));
         await _finalizerManager.RegisterFinalizerAsync<SentryDeploymentFinalizer>(entity);
 
         var resources = await FetchAndConvertDockerCompose(entity);
 
         await AddDefaultConfig(entity);
+        
+        // We don't need to query the resources if the status has the same checksum as the generated spec
+        var configChecksum = resources.GetChecksum();
+        if (entity.Status.LastVersion == configChecksum)
+        {
+            return null;
+        }
 
         var services = resources.OfType<V1Service>().ToList();
+        var deployments = resources.OfType<V1Deployment>().ToList();
+        
+        var actualServices = await _client.List<V1Service>(entity.Namespace());
+        var actualDeployments = await _client.List<V1Deployment>(entity.Namespace());
+
+        if (CheckIfUpdateIsNeeded(services, actualServices, deployments, actualDeployments, entity))
+        {
+            if (entity.Status.Status != "Ready")
+            {
+                entity.Status.Status = "Ready";
+                entity.Status.Message = "Sentry deployment is ready";
+                entity.Status.LastVersion = configChecksum;
+                await _client.UpdateStatus(entity);
+            }
+            return null;
+        }
+        
+        entity.Status.Status = "Updating";
+        entity.Status.Message = "Updating Sentry deployment";
+        await _client.UpdateStatus(entity);
+        
         foreach (var service in services)
         {
             service.AddOwnerReference(entity.MakeOwnerReference());
             var checksum = service.GetChecksum(); 
             service.SetLabel("sentry-operator/checksum", checksum);
-            var svc = await _client.Get<V1Service>(service.Name(), service.Namespace());
+            var svc = actualServices.FirstOrDefault(s => s.Name() == service.Name());
             if (svc == null)
             {
                 await _client.Create(service);
@@ -78,9 +103,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
             }
         }
 
-        var actualDeployments = await _client.List<V1Deployment>(entity.Namespace(), labelSelector: $"app.kubernetes.io/managed-by=sentry-operator");
 
-        var deployments = resources.OfType<V1Deployment>().ToList();
         foreach (var deployment in deployments)
         {
             deployment.AddOwnerReference(entity.MakeOwnerReference());
@@ -126,9 +149,41 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
         entity = (await _client.Get<SentryDeployment>(entity.Name(), entity.Namespace()))!;
         entity.Status.Status = "Ready";
         entity.Status.Message = "Sentry deployment is ready";
+        entity.Status.LastVersion = configChecksum;
         await _client.UpdateStatus(entity);
         //return ResourceControllerResult.RequeueEvent(TimeSpan.FromSeconds(15));
         return null;
+    }
+
+    private bool CheckIfUpdateIsNeeded(List<V1Service> services, IList<V1Service> actualServices, List<V1Deployment> deployments, IList<V1Deployment> actualDeployments, SentryDeployment entity)
+    {
+        foreach (var service in services)
+        {
+            var matchingService = actualServices.FirstOrDefault(s => s.Name() == service.Name());
+            if (matchingService.GetLabel("app.kubernetes.io/managed-by") != "sentry-operator")
+            {
+                continue;
+            }
+            if (matchingService.GetLabel("sentry-operator/checksum") != service.GetChecksum())
+            {
+                return true;
+            }
+        }
+        
+        foreach (var deployment in deployments)
+        {
+            var matchingDeployment = actualDeployments.FirstOrDefault(d => d.Name() == deployment.Name());
+            if (matchingDeployment.GetLabel("app.kubernetes.io/managed-by") != "sentry-operator")
+            {
+                continue;
+            }
+            if (matchingDeployment.GetLabel("sentry-operator/checksum") != deployment.GetChecksum())
+            {
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     private async Task<ResourceControllerResult?> AddCertManagerConfig(SentryDeployment entity)
