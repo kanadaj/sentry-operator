@@ -19,6 +19,7 @@ using SentryOperator.Finalizer;
 namespace SentryOperator.Controller;
 
 [EntityRbac(typeof(SentryDeployment), Verbs = RbacVerb.All)]
+[EntityRbac(typeof(V1Pod), Verbs = RbacVerb.Create | RbacVerb.Delete | RbacVerb.Patch | RbacVerb.Update | RbacVerb.Get | RbacVerb.List)]
 [EntityRbac(typeof(V1Deployment), Verbs = RbacVerb.Create | RbacVerb.Delete | RbacVerb.Patch | RbacVerb.Update | RbacVerb.Get | RbacVerb.List)]
 [EntityRbac(typeof(V1Service), Verbs = RbacVerb.Create | RbacVerb.Delete | RbacVerb.Patch | RbacVerb.Update | RbacVerb.Get | RbacVerb.List)]
 [EntityRbac(typeof(V1Secret), Verbs = RbacVerb.Create | RbacVerb.Delete | RbacVerb.Patch | RbacVerb.Update | RbacVerb.Get | RbacVerb.List)]
@@ -57,6 +58,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
         
         // We don't need to query the resources if the status has the same checksum as the generated spec
         var configChecksum = resources.GetChecksum();
+        _logger.LogInformation("Entity {Name} checksum: {Checksum}, actual checksum: {ActualChecksum}", entity.Name(), configChecksum, entity.Status.LastVersion);
         if (entity.Status.LastVersion == configChecksum && configChecksum != null)
         {
             return null;
@@ -117,8 +119,10 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
             }
             else if(actualDeployment.GetLabel("app.kubernetes.io/managed-by") == "sentry-operator")
             {
+                _logger.LogInformation("Checking deployment {DeploymentName} checksum: {DeploymentChecksum}, actual checksum: {ActualChecksum}", deployment.Name(), deployment.GetChecksum(), actualDeployment.GetLabel("sentry-operator/checksum"));
                 if (actualDeployment.GetLabel("sentry-operator/checksum") != checksum || entity.Spec.Version == "nightly")
                 {
+                    _logger.LogInformation("Updating deployment {DeploymentName}", deployment.Name());
                     deployment.Metadata.ResourceVersion = actualDeployment.Metadata.ResourceVersion;
                     await _client.Update(deployment);
 
@@ -143,6 +147,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
             var result = await AddCertManagerConfig(entity);
             if (result != null)
             {
+                _logger.LogInformation("Requeuing event");
                 return result;
             }
         }
