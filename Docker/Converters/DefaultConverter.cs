@@ -18,6 +18,19 @@ public class DefaultConverter : ContainerConverter
         {
             SecretRef = new V1SecretEnvSource("sentry-env")
         });
+        
+        if (sentryDeployment.Spec.Environment != null)
+        {
+            container.Env ??= new List<V1EnvVar>();
+            foreach (var envVar in sentryDeployment.Spec.Environment)
+            {
+                var containerEnvVar = container.Env.FirstOrDefault(x => x.Name == envVar.Key) ?? new V1EnvVar
+                {
+                    Name = envVar.Key
+                };
+                containerEnvVar.Value = envVar.Value;
+            }
+        }
 
         return container;
     }
