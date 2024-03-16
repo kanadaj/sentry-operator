@@ -94,6 +94,19 @@ public abstract class ContainerConverter : IDockerContainerConverter
                 }
                 : null,
         };
+        
+        if (sentryDeployment.Spec.Environment != null)
+        {
+            container.Env ??= new List<V1EnvVar>();
+            foreach (var envVar in sentryDeployment.Spec.Environment)
+            {
+                if (container.Env.Any(x => x.Name == envVar.Key))
+                {
+                    var containerEnvVar = container.Env.First(x => x.Name == envVar.Key);
+                    containerEnvVar.Value = envVar.Value;
+                }
+            }
+        }
 
         return container;
     }
