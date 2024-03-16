@@ -58,7 +58,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
         
         // We don't need to query the resources if the status has the same checksum as the generated spec
         var configChecksum = resources.GetChecksum();
-        _logger.LogInformation("Entity {Name} checksum: {Checksum}, actual checksum: {ActualChecksum}", entity.Name(), configChecksum, entity.Status.LastVersion);
+        _logger.LogInformation("Entity {Name} expected checksum: {Checksum}, actual checksum: {ActualChecksum}", entity.Name(), configChecksum, entity.Status.LastVersion);
         if (entity.Status.LastVersion == configChecksum && configChecksum != null)
         {
             return null;
@@ -117,7 +117,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
             }
             else if(actualDeployment.GetLabel("app.kubernetes.io/managed-by") == "sentry-operator")
             {
-                _logger.LogInformation("Checking deployment {DeploymentName} checksum: {DeploymentChecksum}, actual checksum: {ActualChecksum}", deployment.Name(), checksum, actualDeployment.GetLabel("sentry-operator/checksum"));
+                _logger.LogDebug("Checking deployment {DeploymentName} expected checksum: {DeploymentChecksum}, actual checksum: {ActualChecksum}", deployment.Name(), checksum, actualDeployment.GetLabel("sentry-operator/checksum"));
                 if (actualDeployment.GetLabel("sentry-operator/checksum") != checksum || entity.Spec.Version == "nightly")
                 {
                     _logger.LogInformation("Updating deployment {DeploymentName}", deployment.Name());
@@ -171,7 +171,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
                 continue;
             }
             
-            _logger.LogInformation("Service {ServiceName} checksum: {ServiceChecksum}, actual checksum: {ActualChecksum}", service.Name(), service.GetChecksum(), matchingService.GetLabel("sentry-operator/checksum"));
+            _logger.LogInformation("Service {ServiceName} expected checksum: {ServiceChecksum}, actual checksum: {ActualChecksum}", service.Name(), service.GetChecksum(), matchingService.GetLabel("sentry-operator/checksum"));
             
             if (matchingService.GetLabel("sentry-operator/checksum") != service.GetChecksum())
             {
@@ -189,7 +189,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
                 continue;
             }
             
-            _logger.LogInformation("Deployment {DeploymentName} checksum: {DeploymentChecksum}, actual checksum: {ActualChecksum}", deployment.Name(), deployment.GetChecksum(), matchingDeployment.GetLabel("sentry-operator/checksum"));
+            _logger.LogInformation("Deployment {DeploymentName} expected checksum: {DeploymentChecksum}, actual checksum: {ActualChecksum}", deployment.Name(), deployment.GetChecksum(), matchingDeployment.GetLabel("sentry-operator/checksum"));
             
             if (matchingDeployment.GetLabel("sentry-operator/checksum") != deployment.GetChecksum())
             {
