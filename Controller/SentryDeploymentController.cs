@@ -88,7 +88,6 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
         
         foreach (var service in services)
         {
-            service.AddOwnerReference(entity.MakeOwnerReference());
             var checksum = service.GetChecksum(); 
             service.SetLabel("sentry-operator/checksum", checksum);
             var svc = actualServices.FirstOrDefault(s => s.Name() == service.Name());
@@ -109,7 +108,6 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
 
         foreach (var deployment in deployments)
         {
-            deployment.AddOwnerReference(entity.MakeOwnerReference());
             var checksum = deployment.GetChecksum(); 
             deployment.SetLabel("sentry-operator/checksum", checksum);
             var actualDeployment = actualDeployments.FirstOrDefault(d => d.Name() == deployment.Name());
@@ -119,7 +117,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
             }
             else if(actualDeployment.GetLabel("app.kubernetes.io/managed-by") == "sentry-operator")
             {
-                _logger.LogInformation("Checking deployment {DeploymentName} checksum: {DeploymentChecksum}, actual checksum: {ActualChecksum}", deployment.Name(), deployment.GetChecksum(), actualDeployment.GetLabel("sentry-operator/checksum"));
+                _logger.LogInformation("Checking deployment {DeploymentName} checksum: {DeploymentChecksum}, actual checksum: {ActualChecksum}", deployment.Name(), checksum, actualDeployment.GetLabel("sentry-operator/checksum"));
                 if (actualDeployment.GetLabel("sentry-operator/checksum") != checksum || entity.Spec.Version == "nightly")
                 {
                     _logger.LogInformation("Updating deployment {DeploymentName}", deployment.Name());
@@ -165,6 +163,8 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
     {
         foreach (var service in services)
         {
+            service.AddOwnerReference(entity.MakeOwnerReference());
+            
             var matchingService = actualServices.FirstOrDefault(s => s.Name() == service.Name());
             if (matchingService.GetLabel("app.kubernetes.io/managed-by") != "sentry-operator")
             {
@@ -181,6 +181,8 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
         
         foreach (var deployment in deployments)
         {
+            deployment.AddOwnerReference(entity.MakeOwnerReference());
+            
             var matchingDeployment = actualDeployments.FirstOrDefault(d => d.Name() == deployment.Name());
             if (matchingDeployment.GetLabel("app.kubernetes.io/managed-by") != "sentry-operator")
             {
