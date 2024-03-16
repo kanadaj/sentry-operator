@@ -16,6 +16,7 @@ rules:
   - ""
   resources:
   - deployments
+  - services
   - secrets
   - configmaps
   verbs:
@@ -35,10 +36,8 @@ rules:
   - list
   - update
 - apiGroups:
-  - ""
   - admissionregistration.k8s.io
   resources:
-  - services
   - validatingwebhookconfigurations
   - mutatingwebhookconfigurations
   verbs:

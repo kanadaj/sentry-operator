@@ -20,6 +20,7 @@ namespace SentryOperator.Controller;
 
 [EntityRbac(typeof(SentryDeployment), Verbs = RbacVerb.All)]
 [EntityRbac(typeof(V1Deployment), Verbs = RbacVerb.Create | RbacVerb.Delete | RbacVerb.Patch | RbacVerb.Update | RbacVerb.Get | RbacVerb.List)]
+[EntityRbac(typeof(V1Service), Verbs = RbacVerb.Create | RbacVerb.Delete | RbacVerb.Patch | RbacVerb.Update | RbacVerb.Get | RbacVerb.List)]
 [EntityRbac(typeof(V1Secret), Verbs = RbacVerb.Create | RbacVerb.Delete | RbacVerb.Patch | RbacVerb.Update | RbacVerb.Get | RbacVerb.List)]
 [EntityRbac(typeof(V1ConfigMap), Verbs = RbacVerb.Create | RbacVerb.Delete | RbacVerb.Patch | RbacVerb.Update | RbacVerb.Get | RbacVerb.List)]
 [GenericRbac(Resources = new[]{"certificates"}, Groups = new[]{"cert-manager.io"}, Verbs = RbacVerb.Get | RbacVerb.Delete | RbacVerb.Patch | RbacVerb.Create)]
@@ -56,7 +57,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
         
         // We don't need to query the resources if the status has the same checksum as the generated spec
         var configChecksum = resources.GetChecksum();
-        if (entity.Status.LastVersion == configChecksum)
+        if (entity.Status.LastVersion == configChecksum && configChecksum != null)
         {
             return null;
         }
@@ -67,7 +68,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
         var actualServices = await _client.List<V1Service>(entity.Namespace());
         var actualDeployments = await _client.List<V1Deployment>(entity.Namespace());
 
-        if (CheckIfUpdateIsNeeded(services, actualServices, deployments, actualDeployments, entity))
+        if (!CheckIfUpdateIsNeeded(services, actualServices, deployments, actualDeployments, entity))
         {
             if (entity.Status.Status != "Ready")
             {
@@ -164,6 +165,9 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
             {
                 continue;
             }
+            
+            _logger.LogInformation("Service {ServiceName} checksum: {ServiceChecksum}, actual checksum: {ActualChecksum}", service.Name(), service.GetChecksum(), matchingService.GetLabel("sentry-operator/checksum"));
+            
             if (matchingService.GetLabel("sentry-operator/checksum") != service.GetChecksum())
             {
                 return true;
@@ -177,6 +181,9 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
             {
                 continue;
             }
+            
+            _logger.LogInformation("Deployment {DeploymentName} checksum: {DeploymentChecksum}, actual checksum: {ActualChecksum}", deployment.Name(), deployment.GetChecksum(), matchingDeployment.GetLabel("sentry-operator/checksum"));
+            
             if (matchingDeployment.GetLabel("sentry-operator/checksum") != deployment.GetChecksum())
             {
                 return true;

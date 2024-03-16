@@ -24,11 +24,11 @@ public class DefaultConverter : ContainerConverter
             container.Env ??= new List<V1EnvVar>();
             foreach (var envVar in sentryDeployment.Spec.Environment)
             {
-                var containerEnvVar = container.Env.FirstOrDefault(x => x.Name == envVar.Key) ?? new V1EnvVar
+                if (container.Env.Any(x => x.Name == envVar.Key))
                 {
-                    Name = envVar.Key
-                };
-                containerEnvVar.Value = envVar.Value;
+                    var containerEnvVar = container.Env.First(x => x.Name == envVar.Key);
+                    containerEnvVar.Value = envVar.Value;
+                }
             }
         }
 
