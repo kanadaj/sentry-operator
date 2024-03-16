@@ -132,7 +132,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
         
         foreach(var deployment in actualDeployments)
         {
-            if (deployments.All(d => d.Name() != deployment.Name()))
+            if (deployments.All(d => d.Name() != deployment.Name()) && deployment.GetLabel("app.kubernetes.io/managed-by") == "sentry-operator")
             {
                 await _client.Delete(deployment);
             }
