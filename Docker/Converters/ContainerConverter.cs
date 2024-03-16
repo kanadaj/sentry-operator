@@ -358,7 +358,7 @@ public abstract class ContainerConverter : IDockerContainerConverter
                                                 new Dictionary<string, ResourceQuantity>
                                                 {
                                                     { "cpu", new ResourceQuantity("50m") },
-                                                    { "memory", new ResourceQuantity("500Mi") },
+                                                    { "memory", new ResourceQuantity("1Gi") },
                                                 },
             _ when name.Contains("ingest") => sentryDeployment.Spec.Resources?.Ingest?.Limits ??
                                               new Dictionary<string, ResourceQuantity>
