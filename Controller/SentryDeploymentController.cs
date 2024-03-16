@@ -72,7 +72,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
 
         if (!CheckIfUpdateIsNeeded(services, actualServices, deployments, actualDeployments, entity))
         {
-            if (entity.Status.Status != "Ready" || entity.Status.LastVersion == null)
+            if (entity.Status.Status != "Ready" || string.IsNullOrWhiteSpace(entity.Status.LastVersion))
             {
                 entity.Status.Status = "Ready";
                 entity.Status.Message = "Sentry deployment is ready";
