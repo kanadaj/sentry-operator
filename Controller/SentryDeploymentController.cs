@@ -93,6 +93,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
             var svc = actualServices.FirstOrDefault(s => s.Name() == service.Name());
             if (svc == null)
             {
+                service.AddOwnerReference(entity.MakeOwnerReference());
                 await _client.Create(service);
             }
             else if(svc.GetLabel("app.kubernetes.io/managed-by") == "sentry-operator")
@@ -100,6 +101,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
                 if (svc.GetLabel("sentry-operator/checksum") != checksum)
                 {
                     service.Metadata.ResourceVersion = svc.Metadata.ResourceVersion;
+                    service.AddOwnerReference(entity.MakeOwnerReference());
                     await _client.Update(service);
                 }
             }
@@ -113,6 +115,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
             var actualDeployment = actualDeployments.FirstOrDefault(d => d.Name() == deployment.Name());
             if (actualDeployment == null)
             {
+                deployment.AddOwnerReference(entity.MakeOwnerReference());
                 await _client.Create(deployment);
             }
             else if(actualDeployment.GetLabel("app.kubernetes.io/managed-by") == "sentry-operator")
@@ -122,6 +125,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
                 {
                     _logger.LogInformation("Updating deployment {DeploymentName}", deployment.Name());
                     deployment.Metadata.ResourceVersion = actualDeployment.Metadata.ResourceVersion;
+                    deployment.AddOwnerReference(entity.MakeOwnerReference());
                     await _client.Update(deployment);
 
                     if (deployment.Metadata.Name == "snuba-api")
