@@ -170,14 +170,14 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
             service.AddOwnerReference(entity.MakeOwnerReference());
             
             var matchingService = actualServices.FirstOrDefault(s => s.Name() == service.Name());
-            if (matchingService.GetLabel("app.kubernetes.io/managed-by") != "sentry-operator")
+            if (matchingService != null && matchingService.GetLabel("app.kubernetes.io/managed-by") != "sentry-operator")
             {
                 continue;
             }
             
             _logger.LogInformation("Service {ServiceName} expected checksum: {ServiceChecksum}, actual checksum: {ActualChecksum}", service.Name(), service.GetChecksum(), matchingService.GetLabel("sentry-operator/checksum"));
             
-            if (matchingService.GetLabel("sentry-operator/checksum") != service.GetChecksum())
+            if (matchingService == null || matchingService.GetLabel("sentry-operator/checksum") != service.GetChecksum())
             {
                 return true;
             }
@@ -188,14 +188,14 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
             deployment.AddOwnerReference(entity.MakeOwnerReference());
             
             var matchingDeployment = actualDeployments.FirstOrDefault(d => d.Name() == deployment.Name());
-            if (matchingDeployment.GetLabel("app.kubernetes.io/managed-by") != "sentry-operator")
+            if (matchingDeployment != null && matchingDeployment.GetLabel("app.kubernetes.io/managed-by") != "sentry-operator")
             {
                 continue;
             }
             
             _logger.LogInformation("Deployment {DeploymentName} expected checksum: {DeploymentChecksum}, actual checksum: {ActualChecksum}", deployment.Name(), deployment.GetChecksum(), matchingDeployment.GetLabel("sentry-operator/checksum"));
             
-            if (matchingDeployment.GetLabel("sentry-operator/checksum") != deployment.GetChecksum())
+            if (matchingDeployment == null || matchingDeployment.GetLabel("sentry-operator/checksum") != deployment.GetChecksum())
             {
                 return true;
             }
