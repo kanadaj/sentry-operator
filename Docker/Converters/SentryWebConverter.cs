@@ -30,6 +30,26 @@ public class SentryWebConverter : SentryContainerConverter
         {
             "pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh run web"
         };
+
+        podSpec.Containers[0].ReadinessProbe = new V1Probe
+        {
+            HttpGet = new V1HTTPGetAction
+            {
+                Port = 9000,
+                Path = "/_health/",
+            },
+            InitialDelaySeconds = 3
+        };
+        
+        podSpec.Containers[0].LivenessProbe = new V1Probe
+        {
+            HttpGet = new V1HTTPGetAction
+            {
+                Port = 9000,
+                Path = "/_health/"
+            },
+            InitialDelaySeconds = 3
+        };
         
         return podSpec;
     }
