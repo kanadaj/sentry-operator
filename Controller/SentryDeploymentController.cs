@@ -516,7 +516,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
         
         var topics = kafkaTopics.Split(" ");
         
-        var pods = await _client.List<V1Pod>(labelSelector: "app.kubernetes.io/managed-by=sentry-operator,app.kubernetes.io/name=kafka");
+        var pods = await _client.List<V1Pod>(labelSelector: "app.kubernetes.io/name=kafka");
         var image = pods.FirstOrDefault()?.Spec.Containers.First().Image;
 
         if (image?.Contains("bitnami") ?? false)
