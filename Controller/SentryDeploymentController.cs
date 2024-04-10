@@ -517,9 +517,9 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
         var topics = kafkaTopics.Split(" ");
         
         var pods = await _client.List<V1Pod>(labelSelector: "app.kubernetes.io/managed-by=sentry-operator,app.kubernetes.io/name=kafka");
-        var image = pods.First().Spec.Containers.First().Image;
+        var image = pods.FirstOrDefault()?.Spec.Containers.First().Image;
 
-        if (image.Contains("bitnami"))
+        if (image?.Contains("bitnami") ?? false)
         {
             var cancellationToken = new CancellationTokenSource(TimeSpan.FromSeconds(30)).Token;
             foreach (var topic in topics)
