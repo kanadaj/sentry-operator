@@ -296,11 +296,13 @@ public abstract class ContainerConverter : IDockerContainerConverter
             "worker" => sentryDeployment.Spec.Resources?.Worker?.Requests ?? new Dictionary<string, ResourceQuantity>
                 { { "cpu", new ResourceQuantity("100m") }, { "memory", new ResourceQuantity("2Gi") }, },
             "cron" => sentryDeployment.Spec.Resources?.Cron?.Requests ?? new Dictionary<string, ResourceQuantity>
-                { { "cpu", new ResourceQuantity("25m") }, { "memory", new ResourceQuantity("250Mi") }, },
+                { { "cpu", new ResourceQuantity("150m") }, { "memory", new ResourceQuantity("250Mi") }, },
             "snuba-api" => sentryDeployment.Spec.Resources?.Snuba?.Requests ?? new Dictionary<string, ResourceQuantity>
                 { { "cpu", new ResourceQuantity("25m") }, { "memory", new ResourceQuantity("110Mi") }, },
             "relay" => sentryDeployment.Spec.Resources?.Relay?.Requests ?? new Dictionary<string, ResourceQuantity>
                 { { "cpu", new ResourceQuantity("20m") }, { "memory", new ResourceQuantity("500Mi") }, },
+            "transactions-consumer" => sentryDeployment.Spec.Resources?.Consumer?.Requests ?? new Dictionary<string, ResourceQuantity>
+               { { "cpu", new ResourceQuantity("150m") }, { "memory", new ResourceQuantity("500Mi") }, },
             _ when name.Contains("consumer") => sentryDeployment.Spec.Resources?.Consumer?.Requests ??
                                                 new Dictionary<string, ResourceQuantity>
                                                 {
@@ -341,13 +343,15 @@ public abstract class ContainerConverter : IDockerContainerConverter
         {
             "web" => sentryDeployment.Spec.Resources?.Web?.Limits ?? null,
             "worker" => sentryDeployment.Spec.Resources?.Worker?.Limits ?? new Dictionary<string, ResourceQuantity>
-                { { "cpu", new ResourceQuantity("200m") }, { "memory", new ResourceQuantity("2.5Gi") }, },
+                { { "cpu", new ResourceQuantity("250m") }, { "memory", new ResourceQuantity("2.5Gi") }, },
             "cron" => sentryDeployment.Spec.Resources?.Cron?.Limits ?? new Dictionary<string, ResourceQuantity>
-                { { "cpu", new ResourceQuantity("50m") }, { "memory", new ResourceQuantity("1Gi") }, },
+                { { "cpu", new ResourceQuantity("500m") }, { "memory", new ResourceQuantity("1Gi") }, },
             "snuba-api" => sentryDeployment.Spec.Resources?.Snuba?.Limits ?? new Dictionary<string, ResourceQuantity>
-                { { "cpu", new ResourceQuantity("50m") }, { "memory", new ResourceQuantity("200Mi") }, },
+                { { "cpu", new ResourceQuantity("1") }, { "memory", new ResourceQuantity("200Mi") }, },
             "relay" => sentryDeployment.Spec.Resources?.Relay?.Limits ?? new Dictionary<string, ResourceQuantity>
-                { { "cpu", new ResourceQuantity("100m") }, { "memory", new ResourceQuantity("1Gi") }, },
+                { { "cpu", new ResourceQuantity("200m") }, { "memory", new ResourceQuantity("1Gi") }, },
+            "transactions-consumer" => sentryDeployment.Spec.Resources?.Consumer?.Requests ?? new Dictionary<string, ResourceQuantity>
+                { { "cpu", new ResourceQuantity("500m") }, { "memory", new ResourceQuantity("1Gi") }, },
             _ when name.Contains("attachments-consumer") => sentryDeployment.Spec.Resources?.Consumer?.Limits ??
                                                 new Dictionary<string, ResourceQuantity>
                                                 {
@@ -357,31 +361,31 @@ public abstract class ContainerConverter : IDockerContainerConverter
             _ when name.Contains("consumer") => sentryDeployment.Spec.Resources?.Consumer?.Limits ??
                                                 new Dictionary<string, ResourceQuantity>
                                                 {
-                                                    { "cpu", new ResourceQuantity("50m") },
+                                                    { "cpu", new ResourceQuantity("250m") },
                                                     { "memory", new ResourceQuantity("1Gi") },
                                                 },
             _ when name.Contains("ingest") => sentryDeployment.Spec.Resources?.Ingest?.Limits ??
                                               new Dictionary<string, ResourceQuantity>
                                               {
-                                                  { "cpu", new ResourceQuantity("100m") },
+                                                  { "cpu", new ResourceQuantity("200m") },
                                                   { "memory", new ResourceQuantity("500Mi") },
                                               },
             _ when name.Contains("forwarder") => sentryDeployment.Spec.Resources?.Forwarder?.Limits ??
                                                  new Dictionary<string, ResourceQuantity>
                                                  {
-                                                     { "cpu", new ResourceQuantity("100m") },
+                                                     { "cpu", new ResourceQuantity("200m") },
                                                      { "memory", new ResourceQuantity("500Mi") },
                                                  },
             _ when name.Contains("replacer") => sentryDeployment.Spec.Resources?.Replacer?.Limits ??
                                                 new Dictionary<string, ResourceQuantity>
                                                 {
-                                                    { "cpu", new ResourceQuantity("100m") },
+                                                    { "cpu", new ResourceQuantity("200m") },
                                                     { "memory", new ResourceQuantity("500Mi") },
                                                 },
             _ when name.Contains("geoip") => sentryDeployment.Spec.Resources?.GeoIP?.Limits ??
                                              new Dictionary<string, ResourceQuantity>
                                              {
-                                                 { "cpu", new ResourceQuantity("100m") },
+                                                 { "cpu", new ResourceQuantity("200m") },
                                                  { "memory", new ResourceQuantity("500Mi") },
                                              },
             _ => null
