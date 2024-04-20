@@ -301,7 +301,7 @@ public abstract class ContainerConverter : IDockerContainerConverter
                 { { "cpu", new ResourceQuantity("25m") }, { "memory", new ResourceQuantity("110Mi") }, },
             "relay" => sentryDeployment.Spec.Resources?.Relay?.Requests ?? new Dictionary<string, ResourceQuantity>
                 { { "cpu", new ResourceQuantity("20m") }, { "memory", new ResourceQuantity("500Mi") }, },
-            "transactions-consumer" => sentryDeployment.Spec.Resources?.Consumer?.Requests ?? new Dictionary<string, ResourceQuantity>
+            "transactions-consumer" => (sentryDeployment.Spec.Resources?.TryGetValue("transactions-consumer", out var trc) ?? false) && trc.Requests != null ? trc.Requests : new Dictionary<string, ResourceQuantity>
                { { "cpu", new ResourceQuantity("150m") }, { "memory", new ResourceQuantity("500Mi") }, },
             _ when name.Contains("consumer") => sentryDeployment.Spec.Resources?.Consumer?.Requests ??
                                                 new Dictionary<string, ResourceQuantity>
@@ -350,7 +350,9 @@ public abstract class ContainerConverter : IDockerContainerConverter
                 { { "cpu", new ResourceQuantity("1") }, { "memory", new ResourceQuantity("200Mi") }, },
             "relay" => sentryDeployment.Spec.Resources?.Relay?.Limits ?? new Dictionary<string, ResourceQuantity>
                 { { "cpu", new ResourceQuantity("200m") }, { "memory", new ResourceQuantity("1Gi") }, },
-            "transactions-consumer" => sentryDeployment.Spec.Resources?.Consumer?.Requests ?? new Dictionary<string, ResourceQuantity>
+            "transactions-consumer" => (sentryDeployment.Spec.Resources?.TryGetValue("transactions-consumer", out var trc) ?? false) && trc.Limits != null ? trc.Limits : new Dictionary<string, ResourceQuantity>
+                { { "cpu", new ResourceQuantity("500m") }, { "memory", new ResourceQuantity("1Gi") }, },
+            "snuba-transactions-consumer" => (sentryDeployment.Spec.Resources?.TryGetValue("snuba-transactions-consumer", out var trc) ?? false) && trc.Limits != null ? trc.Limits : new Dictionary<string, ResourceQuantity>
                 { { "cpu", new ResourceQuantity("500m") }, { "memory", new ResourceQuantity("1Gi") }, },
             _ when name.Contains("attachments-consumer") => sentryDeployment.Spec.Resources?.Consumer?.Limits ??
                                                 new Dictionary<string, ResourceQuantity>
