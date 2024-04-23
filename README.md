@@ -18,6 +18,30 @@ metadata:
   name: sentry
   namespace: sentry
 spec:
+  config:
+    eventRetentionDays: 90
+    relayImage: 'getsentry/relay:24.3.0'
+    postgres:
+        engine: 'sentry.db.postgres'
+        name: "postgres"
+        user: "postgres"
+        password: ""
+        host: "postgres"
+        port: "5432"
+    redis:
+      host: "redis"
+      password: ""
+      port: "6379"
+      database: "0"
+    mail:
+      host: "smtp.example.com"
+      port: "25"
+      user: "user"
+      password: ""
+      from: "example.com"
+    additionalPythonPackages:
+      - beautifulsoup4
+      # - https://github.com/kanadaj/sentry-s3-nodestore/releases/download/1.0.2/sentry-s3-nodestore-1.0.2.tar.gz
   environment:
     OPENAI_API_KEY: ''
     SENTRY_EVENT_RETENTION_DAYS: '30'
@@ -28,8 +52,41 @@ spec:
     GEOIPUPDATE_ACCOUNT_ID: ''
     GEOIPUPDATE_LICENSE_KEY: ''
     GEOIPUPDATE_EDITION_IDS: 'GeoLite2-City'
-  version: 23.6.1
+  resources:
+    worker:
+      limits:
+        cpu: '1'
+        memory: 4Gi
+    consumer:
+      limits:
+        cpu: 200m
+        memory: 1Gi
+  replicas:
+    relay: 2
+    web: 2
+    worker: 2
+  version: 24.3.0
 ```
+
+# Configuration
+The operator creates a `sentry-config` secret in the namespace. While this secret can be configured in the operator for the most part, some advanced config is not available via the operator.
+
+If you wish to use these (for example for VSTS support or to use my S3 nodestore implementation) 
+you need to remove the owner reference from the secret and edit it manually. 
+Once there is no owner reference present, the operator will not touch the secret.
+
+The operator also creates a snuba-env ConfigMap and a sentry-env Secret. These are not managed by the operator after creation and can be used to set environment variables for Snuba and Sentry containers respectively.
+
+# Resource limits
+The operator will set resource limits on all containers except the web service. You can override these limits (including for the web service) by creating elements under resources matching the name of the service.
+
+Additionally, the following special cases exist which are applied as wildcards to all services with the name containing the same:
+- attachments-consumer
+- consumer
+- ingest
+- forwarder
+- replacer
+- geoip
 
 # Dependencies
 This operator does **_not_** install the following depenedencies:

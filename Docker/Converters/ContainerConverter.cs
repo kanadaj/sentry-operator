@@ -347,7 +347,7 @@ public abstract class ContainerConverter : IDockerContainerConverter
             "cron" => sentryDeployment.Spec.Resources?.Cron?.Limits ?? new Dictionary<string, ResourceQuantity>
                 { { "cpu", new ResourceQuantity("500m") }, { "memory", new ResourceQuantity("1Gi") }, },
             "snuba-api" => sentryDeployment.Spec.Resources?.Snuba?.Limits ?? new Dictionary<string, ResourceQuantity>
-                { { "cpu", new ResourceQuantity("1") }, { "memory", new ResourceQuantity("200Mi") }, },
+                { { "cpu", new ResourceQuantity("1") }, { "memory", new ResourceQuantity("1Gi") }, },
             "relay" => sentryDeployment.Spec.Resources?.Relay?.Limits ?? new Dictionary<string, ResourceQuantity>
                 { { "cpu", new ResourceQuantity("200m") }, { "memory", new ResourceQuantity("1Gi") }, },
             "transactions-consumer" => (sentryDeployment.Spec.Resources?.TryGetValue("transactions-consumer", out var trc) ?? false) && trc.Limits != null ? trc.Limits : new Dictionary<string, ResourceQuantity>

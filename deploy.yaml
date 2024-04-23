@@ -47,7 +47,7 @@ spec:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: sentry-operator
+  name: operator-role
 rules:
   - apiGroups:
       - sentry.io
@@ -58,10 +58,12 @@ rules:
     verbs:
       - '*'
   - apiGroups:
-      - apps
       - ""
+      - apps
     resources:
+      - pods
       - deployments
+      - services
       - secrets
       - configmaps
     verbs:
@@ -81,10 +83,8 @@ rules:
       - list
       - update
   - apiGroups:
-      - ""
       - admissionregistration.k8s.io
     resources:
-      - services
       - validatingwebhookconfigurations
       - mutatingwebhookconfigurations
     verbs:
@@ -97,6 +97,14 @@ rules:
       - sentry.io
     resources:
       - sentrydeployments/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - pods/status
     verbs:
       - get
       - patch
@@ -163,6 +171,12 @@ spec:
               properties:
                 status:
                   type: string
+                message:
+                  nullable: true
+                  type: string
+                lastVersion:
+                  nullable: true
+                  type: string
               type: object
             spec:
               description: Specification of the kubernetes object.
@@ -188,18 +202,23 @@ spec:
                       type: string
                     image:
                       description: The image to use for Sentry
+                      nullable: true
                       type: string
                     snubaImage:
                       description: The image to use for Snuba
+                      nullable: true
                       type: string
                     relayImage:
                       description: The image to use for Relay
+                      nullable: true
                       type: string
                     symbolicatorImage:
                       description: The image to use for Symbolicator
+                      nullable: true
                       type: string
                     vroomImage:
                       description: The image to use for Vroom
+                      nullable: true
                       type: string
                     wal2JsonVersion:
                       description: The version of Wal2Json to use
@@ -213,6 +232,84 @@ spec:
                     healthCheckRetries:
                       description: The amount of retries to use for health checks
                       type: string
+                    postgres:
+                      description: The config for the Postgres database
+                      nullable: true
+                      properties:
+                        engine:
+                          nullable: true
+                          type: string
+                        name:
+                          nullable: true
+                          type: string
+                        user:
+                          nullable: true
+                          type: string
+                        password:
+                          nullable: true
+                          type: string
+                        host:
+                          nullable: true
+                          type: string
+                        port:
+                          nullable: true
+                          type: string
+                      type: object
+                    redis:
+                      description: The config for redis
+                      items:
+                        properties:
+                          host:
+                            nullable: true
+                            type: string
+                          password:
+                            nullable: true
+                            type: string
+                          port:
+                            nullable: true
+                            type: string
+                          database:
+                            nullable: true
+                            type: string
+                        type: object
+                      nullable: true
+                      type: array
+                    additionalFeatureFlags:
+                      description: Additional feature flags to enable
+                      items:
+                        type: string
+                      nullable: true
+                      type: array
+                    additionalPythonPackages:
+                      description: Additional Python packages to install
+                      items:
+                        type: string
+                      nullable: true
+                      type: array
+                    mail:
+                      description: The config for mail
+                      nullable: true
+                      properties:
+                        host:
+                          type: string
+                        port:
+                          format: int32
+                          type: integer
+                        username:
+                          type: string
+                        password:
+                          type: string
+                        useTLS:
+                          type: boolean
+                        useSSL:
+                          type: boolean
+                        from:
+                          nullable: true
+                          type: string
+                        mailgunApiKey:
+                          nullable: true
+                          type: string
+                      type: object
                   type: object
                 replicas:
                   description: Override each container's number of replicas here by name
@@ -227,182 +324,35 @@ spec:
                 resources:
                   description: Override the default resource limits
                   nullable: true
-                  properties:
-                    web:
-                      nullable: true
-                      properties:
-                        claims:
-                          items:
-                            properties:
-                              name:
-                                type: string
-                            type: object
-                          type: array
-                        limits:
-                          type: object
-                          x-kubernetes-preserve-unknown-fields: true
-                        requests:
-                          type: object
-                          x-kubernetes-preserve-unknown-fields: true
-                      type: object
-                    worker:
-                      nullable: true
-                      properties:
-                        claims:
-                          items:
-                            properties:
-                              name:
-                                type: string
-                            type: object
-                          type: array
-                        limits:
-                          type: object
-                          x-kubernetes-preserve-unknown-fields: true
-                        requests:
-                          type: object
-                          x-kubernetes-preserve-unknown-fields: true
-                      type: object
-                    cron:
-                      nullable: true
-                      properties:
-                        claims:
-                          items:
-                            properties:
-                              name:
-                                type: string
-                            type: object
-                          type: array
-                        limits:
-                          type: object
-                          x-kubernetes-preserve-unknown-fields: true
-                        requests:
-                          type: object
-                          x-kubernetes-preserve-unknown-fields: true
-                      type: object
-                    snuba:
-                      nullable: true
-                      properties:
-                        claims:
-                          items:
-                            properties:
-                              name:
-                                type: string
-                            type: object
-                          type: array
-                        limits:
-                          type: object
-                          x-kubernetes-preserve-unknown-fields: true
-                        requests:
-                          type: object
-                          x-kubernetes-preserve-unknown-fields: true
-                      type: object
-                    relay:
-                      nullable: true
-                      properties:
-                        claims:
-                          items:
-                            properties:
-                              name:
-                                type: string
-                            type: object
-                          type: array
-                        limits:
-                          type: object
-                          x-kubernetes-preserve-unknown-fields: true
-                        requests:
-                          type: object
-                          x-kubernetes-preserve-unknown-fields: true
-                      type: object
-                    consumer:
-                      nullable: true
-                      properties:
-                        claims:
-                          items:
-                            properties:
-                              name:
-                                type: string
-                            type: object
-                          type: array
-                        limits:
-                          type: object
-                          x-kubernetes-preserve-unknown-fields: true
-                        requests:
-                          type: object
-                          x-kubernetes-preserve-unknown-fields: true
-                      type: object
-                    ingest:
-                      nullable: true
-                      properties:
-                        claims:
-                          items:
-                            properties:
-                              name:
-                                type: string
-                            type: object
-                          type: array
-                        limits:
-                          type: object
-                          x-kubernetes-preserve-unknown-fields: true
-                        requests:
-                          type: object
-                          x-kubernetes-preserve-unknown-fields: true
-                      type: object
-                    forwarder:
-                      nullable: true
-                      properties:
-                        claims:
-                          items:
-                            properties:
-                              name:
-                                type: string
-                            type: object
-                          type: array
-                        limits:
-                          type: object
-                          x-kubernetes-preserve-unknown-fields: true
-                        requests:
-                          type: object
-                          x-kubernetes-preserve-unknown-fields: true
-                      type: object
-                    replacer:
-                      nullable: true
-                      properties:
-                        claims:
-                          items:
-                            properties:
-                              name:
-                                type: string
-                            type: object
-                          type: array
-                        limits:
-                          type: object
-                          x-kubernetes-preserve-unknown-fields: true
-                        requests:
-                          type: object
-                          x-kubernetes-preserve-unknown-fields: true
-                      type: object
-                    geoIP:
-                      nullable: true
-                      properties:
-                        claims:
-                          items:
-                            properties:
-                              name:
-                                type: string
-                            type: object
-                          type: array
-                        limits:
-                          type: object
-                          x-kubernetes-preserve-unknown-fields: true
-                        requests:
-                          type: object
-                          x-kubernetes-preserve-unknown-fields: true
-                      type: object
                   type: object
-                certSecretName:
-                  description: Override the name of the certificate secret
+                  x-kubernetes-preserve-unknown-fields: true
+                certificate:
                   nullable: true
-                  type: string
+                  properties:
+                    install:
+                      nullable: true
+                      type: boolean
+                    certificateCRDName:
+                      description: Override the name of the Certificate CRD generated
+                      nullable: true
+                      type: string
+                    issuerName:
+                      description: Override the name of the issuer
+                      nullable: true
+                      type: string
+                    issuerKind:
+                      description: Override the kind of the issuer
+                      type: string
+                    secretName:
+                      description: Override the name of the certificate secret
+                      nullable: true
+                      type: string
+                    customHosts:
+                      description: Add additional hosts to the certificate
+                      items:
+                        type: string
+                      type: array
+                  type: object
               type: object
           type: object
       served: true
