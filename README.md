@@ -9,6 +9,16 @@ Currently this operator assumes that cert-manager is installed; however you can 
 
 For a full list of supported settings, see [SentryDeployment.cs](./Entities/SentryDeployment.cs).
 
+# Getting started
+1. Deploy ClickHouse with an operator or via Helm: `helm install -n sentry --set persistence.size=200Gi --set image.digest=21.8 clickhouse bitnami/clickhouse` (see https://artifacthub.io/packages/helm/bitnami/clickhouse for documentation).
+2. Deploy postgres with an operator or via Helm: `helm install -n sentry --set primary.persistence.size=10Gi postgres bitnami/postgresql` (see https://artifacthub.io/packages/helm/bitnami/postgresql for documentation)
+3. Deploy Redis with an operator or via Helm: `helm install -n sentry redis bitnami/redis` (see https://artifacthub.io/packages/helm/bitnami/redis for documentation)
+4. Deploy Kafka with an operator or via Helm: `helm install -n sentry kafka bitnami/kafka` (see https://artifacthub.io/packages/helm/bitnami/kafka for documentation)
+5. Deploy the operator: `kubectl apply -f deploy.yaml`
+6. Create a SentryDeployment CRD: `kubectl apply -f example.yaml`
+
+Please be aware that for steps 1-4, you need to adjust the settings for your needs, particularly the storage settings.
+
 # Example config
 
 ```yaml
