@@ -81,6 +81,84 @@ spec:
                   healthCheckRetries:
                     description: The amount of retries to use for health checks
                     type: string
+                  postgres:
+                    description: The config for the Postgres database
+                    nullable: true
+                    properties:
+                      engine:
+                        nullable: true
+                        type: string
+                      name:
+                        nullable: true
+                        type: string
+                      user:
+                        nullable: true
+                        type: string
+                      password:
+                        nullable: true
+                        type: string
+                      host:
+                        nullable: true
+                        type: string
+                      port:
+                        nullable: true
+                        type: string
+                    type: object
+                  redis:
+                    description: The config for redis
+                    items:
+                      properties:
+                        host:
+                          nullable: true
+                          type: string
+                        password:
+                          nullable: true
+                          type: string
+                        port:
+                          nullable: true
+                          type: string
+                        database:
+                          nullable: true
+                          type: string
+                      type: object
+                    nullable: true
+                    type: array
+                  additionalFeatureFlags:
+                    description: Additional feature flags to enable
+                    items:
+                      type: string
+                    nullable: true
+                    type: array
+                  additionalPythonPackages:
+                    description: Additional Python packages to install
+                    items:
+                      type: string
+                    nullable: true
+                    type: array
+                  mail:
+                    description: The config for mail
+                    nullable: true
+                    properties:
+                      host:
+                        type: string
+                      port:
+                        format: int32
+                        type: integer
+                      username:
+                        type: string
+                      password:
+                        type: string
+                      useTLS:
+                        type: boolean
+                      useSSL:
+                        type: boolean
+                      from:
+                        nullable: true
+                        type: string
+                      mailgunApiKey:
+                        nullable: true
+                        type: string
+                    type: object
                 type: object
               replicas:
                 description: Override each container's number of replicas here by name

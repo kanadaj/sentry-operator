@@ -12,9 +12,10 @@ rules:
   verbs:
   - '*'
 - apiGroups:
-  - apps
   - ""
+  - apps
   resources:
+  - pods
   - deployments
   - services
   - secrets
@@ -50,6 +51,14 @@ rules:
   - sentry.io
   resources:
   - sentrydeployments/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - pods/status
   verbs:
   - get
   - patch

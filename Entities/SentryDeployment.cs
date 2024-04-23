@@ -61,7 +61,6 @@ public class SentryDeploymentCertificateConfig
     public string? SecretName { get; set; }
     
     [Description("Add additional hosts to the certificate")]
-    
     public string[] CustomHosts { get; set; } = Array.Empty<string>();
 }
 
@@ -78,55 +77,4 @@ public class ResourceLimitConfig : Dictionary<string, V1ResourceRequirements>
     public V1ResourceRequirements? Replacer { get; set; }
     // ReSharper disable once InconsistentNaming
     public V1ResourceRequirements? GeoIP { get; set; }
-}
-
-public class SentryDeploymentConfig
-{
-    [Description("The amount of days to keep events for")]
-    public int EventRetentionDays { get; set; } = 90;
-    
-    [Description("You can either use a port number or an IP:PORT combo for SENTRY_BIND")]
-    public string Bind { get; set; } = "9000";
-    
-    [Description("The image to use for Sentry")]
-    public string? Image { get; set; }
-    
-    [Description("The image to use for Snuba")]
-    public string? SnubaImage { get; set; }
-    
-    [Description("The image to use for Relay")]
-    public string? RelayImage { get; set; }
-    
-    [Description("The image to use for Symbolicator")]
-    public string? SymbolicatorImage { get; set; }
-    
-    [Description("The image to use for Vroom")]
-    public string? VroomImage { get; set; }
-    
-    [Description("The version of Wal2Json to use")]
-    public string Wal2JsonVersion { get; set; } = "latest";
-    
-    [Description("The interval to use for health checks")]
-    public string HealthCheckInterval { get; set; } = "30s";
-    
-    [Description("The timeout to use for health checks")]
-    public string HealthCheckTimeout { get; set; } = "60s";
-    
-    [Description("The amount of retries to use for health checks")]
-    public string HealthCheckRetries { get; set; } = "10";
-
-    public string ReplaceVariables(string yaml, string version)
-    {
-        return yaml.Replace("$SENTRY_EVENT_RETENTION_DAYS", EventRetentionDays.ToString())
-            .Replace("$SENTRY_BIND", Bind)
-            .Replace("$SENTRY_IMAGE", Image ?? $"getsentry/sentry:{version}")
-            .Replace("$SNUBA_IMAGE", SnubaImage ?? $"getsentry/snuba:{version}")
-            .Replace("$RELAY_IMAGE", RelayImage ?? $"getsentry/relay:{version}")
-            .Replace("$SYMBOLICATOR_IMAGE", SymbolicatorImage ?? $"getsentry/symbolicator:{version}")
-            .Replace("$VROOM_IMAGE", VroomImage ?? $"getsentry/vroom:{version}")
-            .Replace("$WAL2JSON_VERSION", Wal2JsonVersion)
-            .Replace("$HEALTHCHECK_INTERVAL", HealthCheckInterval)
-            .Replace("$HEALTHCHECK_TIMEOUT", HealthCheckTimeout)
-            .Replace("$HEALTHCHECK_RETRIES", HealthCheckRetries);
-    }
 }
