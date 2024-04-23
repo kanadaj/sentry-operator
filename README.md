@@ -21,62 +21,7 @@ Please be aware that for steps 1-4, you need to adjust the settings for your nee
 
 # Example config
 
-```yaml
-apiVersion: sentry.io/v1
-kind: SentryDeployment
-metadata:
-  name: sentry
-  namespace: sentry
-spec:
-  config:
-    eventRetentionDays: 90
-    relayImage: 'getsentry/relay:24.3.0'
-    postgres:
-        engine: 'sentry.db.postgres'
-        name: "postgres"
-        user: "postgres"
-        password: ""
-        host: "postgres"
-        port: "5432"
-    redis:
-      host: "redis"
-      password: ""
-      port: "6379"
-      database: "0"
-    mail:
-      host: "smtp.example.com"
-      port: "25"
-      user: "user"
-      password: ""
-      from: "example.com"
-    additionalPythonPackages:
-      - beautifulsoup4
-      # - https://github.com/kanadaj/sentry-s3-nodestore/releases/download/1.0.2/sentry-s3-nodestore-1.0.2.tar.gz
-  environment:
-    OPENAI_API_KEY: ''
-    SENTRY_EVENT_RETENTION_DAYS: '30'
-    SENTRY_MAIL_HOST: ''
-    REDIS_PORT: '6379'
-    CLICKHOUSE_PORT: '9000'
-    SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE: ''
-    GEOIPUPDATE_ACCOUNT_ID: ''
-    GEOIPUPDATE_LICENSE_KEY: ''
-    GEOIPUPDATE_EDITION_IDS: 'GeoLite2-City'
-  resources:
-    worker:
-      limits:
-        cpu: '1'
-        memory: 4Gi
-    consumer:
-      limits:
-        cpu: 200m
-        memory: 1Gi
-  replicas:
-    relay: 2
-    web: 2
-    worker: 2
-  version: 24.3.0
-```
+See [example.yaml](./example.yaml) for an example configuration.
 
 # Configuration
 The operator creates a `sentry-config` secret in the namespace. While this secret can be configured in the operator for the most part, some advanced config is not available via the operator.
