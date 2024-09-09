@@ -131,10 +131,10 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
                     deployment.AddOwnerReference(entity.MakeOwnerReference());
                     await _client.Update(deployment);
 
-                    if (deployment.Metadata.Name == "snuba-api")
-                    {
-                        await InstallKafkaTopics(entity);
-                    }
+                    // if (deployment.Metadata.Name == "snuba-api")
+                    // {
+                    //     await InstallKafkaTopics(entity);
+                    // }
                 }
             }
         }

@@ -63,7 +63,7 @@ public class SentryWebConverter : SentryContainerConverter
             
         initContainer.Args = new List<string>
         {
-            "pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh upgrade --noinput",
+            "pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh upgrade --noinput --create-kafka-topics",
         };
             
         return new List<V1Container>
