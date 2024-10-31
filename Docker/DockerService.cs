@@ -48,6 +48,9 @@ public class DockerService
     
     [YamlMember(Alias = "ports")]
     public List<string>? Ports { get; set; }
+    
+    [YamlMember(Alias = "profiles")]
+    public List<string>? Profiles { get; set; }
 }
 
 public class DependsOn
