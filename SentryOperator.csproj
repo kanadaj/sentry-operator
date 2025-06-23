@@ -22,6 +22,10 @@
 
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include=".github\workflows\docker-publish.yml" />
+  </ItemGroup>
+
 
 
 

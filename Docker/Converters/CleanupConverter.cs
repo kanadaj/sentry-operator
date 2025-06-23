@@ -15,6 +15,9 @@ public abstract class CleanupConverter : ContainerConverter
         
         var container = base.GetBaseContainer(name, service, sentryDeployment);
         
+        container.SecurityContext ??= new V1SecurityContext();
+        container.SecurityContext.RunAsUser = 0;
+        
         container.Command = new List<string>
         {
             "/bin/bash",
