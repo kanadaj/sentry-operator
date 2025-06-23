@@ -1,18 +1,17 @@
 ﻿using System.Text.RegularExpressions;
-using KubeOps.Operator.Webhooks;
+using KubeOps.Operator.Web.Webhooks.Admission.Validation;
 using SentryOperator.Entities;
 
 namespace SentryOperator.Webhooks;
 
-public class SentryDeploymentValidator : IValidationWebhook<SentryDeployment>
+[ValidationWebhook(typeof(SentryDeployment))]
+public class SentryDeploymentValidator : ValidationWebhook<SentryDeployment>
 {
-    public AdmissionOperations Operations => AdmissionOperations.Create;
-
-    public ValidationResult Create(SentryDeployment newEntity, bool dryRun)
+    public override ValidationResult Create(SentryDeployment newEntity, bool dryRun)
     {
         if (newEntity.Spec.Version == null && newEntity.Spec.DockerComposeUrl == null)
         {
-            return ValidationResult.Fail(StatusCodes.Status400BadRequest, "Either version or docker compose url must be set.");
+            return Fail("Either version or docker compose url must be set.", StatusCodes.Status400BadRequest);
         }
 
         if (newEntity.Spec.Version != null)
@@ -20,7 +19,7 @@ public class SentryDeploymentValidator : IValidationWebhook<SentryDeployment>
             // Sentry versions are in the format of 21.5.0, 21.5.1, 21.5.2, etc.
             if (!Regex.IsMatch(newEntity.Spec.Version, @"^(nightly)|(\d+\.\d+\.\d+)$"))
             {
-                return ValidationResult.Fail(StatusCodes.Status400BadRequest, "Version must be in the format of 21.5.0, 21.5.1, 21.5.2, etc.");
+                return Fail("Version must be in the format of 21.5.0, 21.5.1, 21.5.2, etc.", StatusCodes.Status400BadRequest);
             }
         }
 
@@ -28,10 +27,10 @@ public class SentryDeploymentValidator : IValidationWebhook<SentryDeployment>
         {
             if(!Uri.TryCreate(newEntity.Spec.DockerComposeUrl, UriKind.Absolute, out var _))
             {
-                return ValidationResult.Fail(StatusCodes.Status400BadRequest, "Docker compose url must be a valid url.");
+                return Fail("Docker compose url must be a valid url.", StatusCodes.Status400BadRequest);
             }
         }
         
-        return ValidationResult.Success();
+        return Success();
     }
 }

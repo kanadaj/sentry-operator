@@ -3,13 +3,12 @@ using System.Text;
 using System.Text.RegularExpressions;
 using k8s;
 using k8s.Models;
+using KubeOps.Abstractions.Controller;
+using KubeOps.Abstractions.Entities;
+using KubeOps.Abstractions.Events;
+using KubeOps.Abstractions.Finalizer;
+using KubeOps.Abstractions.Rbac;
 using KubeOps.KubernetesClient;
-using KubeOps.Operator.Controller;
-using KubeOps.Operator.Controller.Results;
-using KubeOps.Operator.Entities.Extensions;
-using KubeOps.Operator.Events;
-using KubeOps.Operator.Finalizer;
-using KubeOps.Operator.Rbac;
 using Microsoft.Extensions.Caching.Distributed;
 using SentryOperator.Docker;
 using SentryOperator.Entities;
@@ -25,33 +24,33 @@ namespace SentryOperator.Controller;
 [EntityRbac(typeof(V1Secret), Verbs = RbacVerb.Create | RbacVerb.Delete | RbacVerb.Patch | RbacVerb.Update | RbacVerb.Get | RbacVerb.List)]
 [EntityRbac(typeof(V1ConfigMap), Verbs = RbacVerb.Create | RbacVerb.Delete | RbacVerb.Patch | RbacVerb.Update | RbacVerb.Get | RbacVerb.List)]
 [GenericRbac(Resources = new[] { "certificates" }, Groups = new[] { "cert-manager.io" }, Verbs = RbacVerb.Get | RbacVerb.Delete | RbacVerb.Patch | RbacVerb.Create)]
-public class SentryDeploymentController : IResourceController<SentryDeployment>
+public class SentryDeploymentController : IEntityController<SentryDeployment>
 {
     private const string DockerComposeUrl = "https://raw.githubusercontent.com/getsentry/self-hosted/master/docker-compose.yml";
     private readonly ILogger<SentryDeploymentController> _logger;
-    private readonly IFinalizerManager<SentryDeployment> _finalizerManager;
+    private readonly EntityFinalizerAttacher<SentryDeploymentFinalizer, SentryDeployment> _finalizer;
     private readonly HttpClient _httpClient;
     private readonly IKubernetesClient _client;
     private readonly IDistributedCache _cache;
-    private readonly IEventManager _manager;
+    private readonly EventPublisher _eventPublisher;
     private readonly DockerComposeConverter _dockerComposeConverter;
 
-    public SentryDeploymentController(ILogger<SentryDeploymentController> logger, IFinalizerManager<SentryDeployment> finalizerManager, IHttpClientFactory httpClientFactory, IKubernetesClient client,
-        IDistributedCache cache, IEventManager manager, DockerComposeConverter dockerComposeConverter)
+    public SentryDeploymentController(ILogger<SentryDeploymentController> logger, EntityFinalizerAttacher<SentryDeploymentFinalizer, SentryDeployment> finalizer, IHttpClientFactory httpClientFactory, IKubernetesClient client,
+        IDistributedCache cache, EventPublisher eventPublisher, DockerComposeConverter dockerComposeConverter)
     {
         _logger = logger;
-        _finalizerManager = finalizerManager;
+        _finalizer = finalizer;
         _client = client;
         _cache = cache;
-        _manager = manager;
+        _eventPublisher = eventPublisher;
         _dockerComposeConverter = dockerComposeConverter;
         _httpClient = httpClientFactory.CreateClient();
     }
 
-    public async Task<ResourceControllerResult?> ReconcileAsync(SentryDeployment entity)
+    public async Task ReconcileAsync(SentryDeployment entity, CancellationToken cancellationToken)
     {
         _logger.LogInformation("Entity {Name} called {ReconcileAsyncName}", entity.Name(), nameof(ReconcileAsync));
-        await _finalizerManager.RegisterFinalizerAsync<SentryDeploymentFinalizer>(entity);
+        await _finalizer(entity, cancellationToken);
 
         var resources = await FetchAndConvertDockerCompose(entity);
 
@@ -62,14 +61,14 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
         _logger.LogInformation("Entity {Name} expected checksum: {Checksum}, actual checksum: {ActualChecksum}", entity.Name(), configChecksum, entity.Status.LastVersion);
         if (entity.Status.LastVersion == configChecksum && configChecksum != null)
         {
-            return null;
+            return;
         }
 
         var services = resources.OfType<V1Service>().ToList();
         var deployments = resources.OfType<V1Deployment>().ToList();
 
-        var actualServices = await _client.List<V1Service>(entity.Namespace());
-        var actualDeployments = await _client.List<V1Deployment>(entity.Namespace());
+        var actualServices = await _client.ListAsync<V1Service>(entity.Namespace());
+        var actualDeployments = await _client.ListAsync<V1Deployment>(entity.Namespace());
 
         if (!CheckIfUpdateIsNeeded(services, actualServices, deployments, actualDeployments, entity))
         {
@@ -78,15 +77,15 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
                 entity.Status.Status = "Ready";
                 entity.Status.Message = "Sentry deployment is ready";
                 entity.Status.LastVersion = configChecksum;
-                await _client.UpdateStatus(entity);
+                await _client.UpdateStatusAsync(entity);
             }
 
-            return null;
+            return;
         }
 
         entity.Status.Status = "Updating";
         entity.Status.Message = "Updating Sentry deployment";
-        await _client.UpdateStatus(entity);
+        await _client.UpdateStatusAsync(entity);
 
         foreach (var service in services)
         {
@@ -96,7 +95,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
             if (svc == null)
             {
                 service.AddOwnerReference(entity.MakeOwnerReference());
-                await _client.Create(service);
+                await _client.CreateAsync(service);
             }
             else if (svc.GetLabel("app.kubernetes.io/managed-by") == "sentry-operator")
             {
@@ -104,7 +103,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
                 {
                     service.Metadata.ResourceVersion = svc.Metadata.ResourceVersion;
                     service.AddOwnerReference(entity.MakeOwnerReference());
-                    await _client.Update(service);
+                    await _client.UpdateAsync(service);
                 }
             }
         }
@@ -118,7 +117,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
             if (actualDeployment == null)
             {
                 deployment.AddOwnerReference(entity.MakeOwnerReference());
-                await _client.Create(deployment);
+                await _client.CreateAsync(deployment);
             }
             else if (actualDeployment.GetLabel("app.kubernetes.io/managed-by") == "sentry-operator")
             {
@@ -129,7 +128,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
                     _logger.LogInformation("Updating deployment {DeploymentName}", deployment.Name());
                     deployment.Metadata.ResourceVersion = actualDeployment.Metadata.ResourceVersion;
                     deployment.AddOwnerReference(entity.MakeOwnerReference());
-                    await _client.Update(deployment);
+                    await _client.UpdateAsync(deployment);
 
                     // if (deployment.Metadata.Name == "snuba-api")
                     // {
@@ -143,27 +142,31 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
         {
             if (deployments.All(d => d.Name() != deployment.Name()) && deployment.GetLabel("app.kubernetes.io/managed-by") == "sentry-operator")
             {
-                await _client.Delete(deployment);
+                await _client.DeleteAsync(deployment);
             }
         }
 
         if ((entity.Spec.Certificate?.Install ?? true))
         {
             var result = await AddCertManagerConfig(entity);
-            if (result != null)
+            if (!result)
             {
                 _logger.LogInformation("Requeuing event");
-                return result;
+                
+                entity.Status.Status = "Error creating certificate";
+                await _client.UpdateStatusAsync(entity);
+                
+                return;
             }
         }
 
-        entity = (await _client.Get<SentryDeployment>(entity.Name(), entity.Namespace()))!;
+        entity = (await _client.GetAsync<SentryDeployment>(entity.Name(), entity.Namespace()))!;
         entity.Status.Status = "Ready";
         entity.Status.Message = "Sentry deployment is ready";
         entity.Status.LastVersion = configChecksum;
-        await _client.UpdateStatus(entity);
+        await _client.UpdateStatusAsync(entity);
         //return ResourceControllerResult.RequeueEvent(TimeSpan.FromSeconds(15));
-        return null;
+        return;
     }
 
     private bool CheckIfUpdateIsNeeded(List<V1Service> services, IList<V1Service> actualServices, List<V1Deployment> deployments, IList<V1Deployment> actualDeployments, SentryDeployment entity)
@@ -217,10 +220,10 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
         return false;
     }
 
-    private async Task<ResourceControllerResult?> AddCertManagerConfig(SentryDeployment entity)
+    private async Task<bool> AddCertManagerConfig(SentryDeployment entity)
     {
         var certName = entity.Spec.Certificate?.CertificateCRDName ?? (entity.Name() + "-certificate");
-        var certificate = await _client.Get<Certificate>(certName, entity.Namespace());
+        var certificate = await _client.GetAsync<Certificate>(certName, entity.Namespace());
         _logger.LogInformation("Certificate {CertificateName} found: {CertificateFound}", certName, certificate != null);
         if (certificate == null)
         {
@@ -254,7 +257,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
             _logger.LogInformation("Creating certificate {CertificateName}: {Certificate}", certName, KubernetesYaml.Serialize(certificate));
             try
             {
-                await _client.Create(certificate);
+                await _client.CreateAsync(certificate);
             }
             catch (Exception e)
             {
@@ -262,18 +265,18 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
 
                 entity.Status.Status = "Error";
                 entity.Status.Message = "Error creating certificate: " + e.Message;
-                await _client.UpdateStatus(entity);
-                await _manager.PublishAsync(entity, "Error", "Error creating certificate: " + e.Message);
-                return ResourceControllerResult.RequeueEvent(TimeSpan.FromSeconds(15));
+                await _client.UpdateStatusAsync(entity);
+                await _eventPublisher(entity, "Error", "Error creating certificate: " + e.Message);
+                return false;
             }
         }
 
-        return null;
+        return true;
     }
 
     private async Task AddDefaultConfig(SentryDeployment entity)
     {
-        var secret = await _client.Get<V1Secret>("sentry-env", entity.Namespace());
+        var secret = await _client.GetAsync<V1Secret>("sentry-env", entity.Namespace());
 
         var config = entity.Spec.Config ?? new();
         if (secret == null)
@@ -281,7 +284,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
             var secretKeyBytes = RandomNumberGenerator.GetBytes(64);
             var secretKey = Convert.ToBase64String(secretKeyBytes);
 
-            await _client.Create(new V1Secret()
+            await _client.CreateAsync(new V1Secret()
             {
                 Metadata = new V1ObjectMeta
                 {
@@ -303,7 +306,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
             });
         }
 
-        var cronConfigMap = await _client.Get<V1ConfigMap>("sentry-cron", entity.Namespace());
+        var cronConfigMap = await _client.GetAsync<V1ConfigMap>("sentry-cron", entity.Namespace());
         if (cronConfigMap == null)
         {
             cronConfigMap = new V1ConfigMap
@@ -328,10 +331,10 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
                                         """.Replace("\r\n", "\n"), // Make sure we don't do Windows line endings on Linux!
                 }
             };
-            await _client.Create(cronConfigMap);
+            await _client.CreateAsync(cronConfigMap);
         }
 
-        var configMap = await _client.Get<V1Secret>("sentry-config", entity.Namespace());
+        var configMap = await _client.GetAsync<V1Secret>("sentry-config", entity.Namespace());
         if (configMap == null)
         {
             var (cachedConfigTemplate, secretKey) = await GenerateSentryConfig(entity);
@@ -355,7 +358,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
 
             configMap.AddOwnerReference(entity.MakeOwnerReference());
 
-            await _client.Create(configMap);
+            await _client.CreateAsync(configMap);
         }
         else if (configMap.IsOwnedBy(entity))
         {
@@ -371,11 +374,11 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
             if (hash != configMap.GetLabel("sentry-operator/checksum"))
             {
                 configMap.SetLabel("sentry-operator/checksum", hash);
-                await _client.Update(configMap);
+                await _client.UpdateAsync(configMap);
             }
         }
 
-        var snubaEnvConfigMap = await _client.Get<V1ConfigMap>("snuba-env", entity.Namespace());
+        var snubaEnvConfigMap = await _client.GetAsync<V1ConfigMap>("snuba-env", entity.Namespace());
         if (snubaEnvConfigMap == null)
         {
             snubaEnvConfigMap = new V1ConfigMap
@@ -403,7 +406,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
                     ["UWSGI_IGNORE_SIGPIPE"] = "true"
                 }
             };
-            await _client.Create(snubaEnvConfigMap);
+            await _client.CreateAsync(snubaEnvConfigMap);
         }
 
         await InitAndGetRelayConfigMap(entity);
@@ -573,7 +576,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
     /// <returns></returns>
     private async Task<V1ConfigMap> InitAndGetRelayConfigMap(SentryDeployment entity)
     {
-        var relayConfigMap = await _client.Get<V1ConfigMap>("relay-conf", entity.Namespace());
+        var relayConfigMap = await _client.GetAsync<V1ConfigMap>("relay-conf", entity.Namespace());
         if (relayConfigMap == null)
         {
             var configUrl = $"https://raw.githubusercontent.com/getsentry/self-hosted/{entity.Spec.GetVersion()}/relay/config.example.yml";
@@ -593,7 +596,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
                 }
             };
 
-            await _client.Create(relayConfigMap);
+            await _client.CreateAsync(relayConfigMap);
         }
 
         _ = Task.Run(() => WaitForRelayAndGenerateCredentials(entity));
@@ -603,12 +606,12 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
 
     private async Task WaitForRelayAndGenerateCredentials(SentryDeployment entity)
     {
-        var pods = await _client.List<V1Pod>(entity.Namespace(), labelSelector: $"app.kubernetes.io/managed-by=sentry-operator,app.kubernetes.io/name=relay");
+        var pods = await _client.ListAsync<V1Pod>(entity.Namespace(), labelSelector: $"app.kubernetes.io/managed-by=sentry-operator,app.kubernetes.io/name=relay");
         var pod = pods.First();
         while (pod.Status.Phase != "Running")
         {
             await Task.Delay(TimeSpan.FromSeconds(5));
-            pods = await _client.List<V1Pod>(entity.Namespace(), labelSelector: $"app.kubernetes.io/managed-by=sentry-operator,app.kubernetes.io/name=relay");
+            pods = await _client.ListAsync<V1Pod>(entity.Namespace(), labelSelector: $"app.kubernetes.io/managed-by=sentry-operator,app.kubernetes.io/name=relay");
             pod = pods.First();
         }
 
@@ -620,7 +623,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
         var configMap = await InitAndGetRelayConfigMap(entity);
 
         // Find relay pod by label
-        var pods = await _client.List<V1Pod>(entity.Namespace(), labelSelector: $"app.kubernetes.io/managed-by=sentry-operator,app.kubernetes.io/name=relay");
+        var pods = await _client.ListAsync<V1Pod>(entity.Namespace(), labelSelector: $"app.kubernetes.io/managed-by=sentry-operator,app.kubernetes.io/name=relay");
         var pod = pods.First();
 
         // Timeout after 30 seconds with cancellation token
@@ -643,16 +646,16 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
                 {
                     _logger.LogError("Error generating credentials: {Error}", error);
 
-                    entity = (await _client.Get<SentryDeployment>(entity.Name(), entity.Namespace()))!;
+                    entity = (await _client.GetAsync<SentryDeployment>(entity.Name(), entity.Namespace()))!;
                     entity.Status.Status = "Error";
                     entity.Status.Message = error;
-                    await _client.UpdateStatus(entity);
+                    await _client.UpdateStatusAsync(entity);
 
                     return;
                 }
 
                 configMap.Data["credentials.json"] = credentials;
-                await _client.Update(configMap);
+                await _client.UpdateAsync(configMap);
             }, cancellationToken);
     }
 
@@ -683,7 +686,7 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
 
         var topics = kafkaTopics.Split(" ");
 
-        var pods = await _client.List<V1Pod>(labelSelector: "app.kubernetes.io/name=kafka");
+        var pods = await _client.ListAsync<V1Pod>(labelSelector: "app.kubernetes.io/name=kafka");
         var image = pods.FirstOrDefault()?.Spec.Containers.First().Image;
 
         if (image?.Contains("bitnami") ?? false)
@@ -726,39 +729,40 @@ public class SentryDeploymentController : IResourceController<SentryDeployment>
         return Task.CompletedTask;
     }
 
-    public async Task DeletedAsync(SentryDeployment entity)
+    public async Task DeletedAsync(SentryDeployment entity, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         _logger.LogInformation("Entity {Name} called {DeletedAsyncName}", entity.Name(), nameof(DeletedAsync));
 
-        var deployments = await _client.List<V1Deployment>(entity.Namespace(), labelSelector: $"app.kubernetes.io/managed-by=sentry-operator");
+        var deployments = await _client.ListAsync<V1Deployment>(entity.Namespace(), labelSelector: $"app.kubernetes.io/managed-by=sentry-operator", cancellationToken: cancellationToken);
         foreach (var deployment in deployments)
         {
-            await _client.Delete(deployment);
+            await _client.DeleteAsync(deployment, CancellationToken.None);
         }
 
-        var services = await _client.List<V1Service>(entity.Namespace(), labelSelector: $"app.kubernetes.io/managed-by=sentry-operator");
+        var services = await _client.ListAsync<V1Service>(entity.Namespace(), labelSelector: $"app.kubernetes.io/managed-by=sentry-operator", CancellationToken.None);
         foreach (var service in services)
         {
-            await _client.Delete(service);
+            await _client.DeleteAsync(service, CancellationToken.None);
         }
 
-        var configMaps = await _client.List<V1ConfigMap>(entity.Namespace(), labelSelector: $"app.kubernetes.io/managed-by=sentry-operator");
+        var configMaps = await _client.ListAsync<V1ConfigMap>(entity.Namespace(), labelSelector: $"app.kubernetes.io/managed-by=sentry-operator", CancellationToken.None);
         foreach (var configMap in configMaps)
         {
-            await _client.Delete(configMap);
+            await _client.DeleteAsync(configMap, CancellationToken.None);
         }
 
-        var secrets = await _client.List<V1Secret>(entity.Namespace(), labelSelector: $"app.kubernetes.io/managed-by=sentry-operator");
+        var secrets = await _client.ListAsync<V1Secret>(entity.Namespace(), labelSelector: $"app.kubernetes.io/managed-by=sentry-operator", CancellationToken.None);
         foreach (var secret in secrets)
         {
-            await _client.Delete(secret);
+            await _client.DeleteAsync(secret, CancellationToken.None);
         }
 
         var certName = entity.Name() + "-certificate";
-        var certificate = await _client.Get<Certificate>(certName, entity.Namespace());
+        var certificate = await _client.GetAsync<Certificate>(certName, entity.Namespace(), CancellationToken.None);
         if (certificate != null)
         {
-            await _client.Delete(certificate);
+            await _client.DeleteAsync(certificate, CancellationToken.None);
         }
     }
 

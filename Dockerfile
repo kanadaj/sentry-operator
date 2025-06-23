@@ -1,5 +1,5 @@
 # Build the operator
-FROM mcr.microsoft.com/dotnet/sdk:8.0 as build
+FROM mcr.microsoft.com/dotnet/sdk:9.0 as build
 WORKDIR /operator
 
 COPY ./ ./
@@ -12,7 +12,7 @@ RUN cp cfssl cfssljson out/
 RUN dotnet publish -c Release -o out ./SentryOperator.csproj
 
 # The runner for the application
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 as final
+FROM mcr.microsoft.com/dotnet/aspnet:9.0 as final
 
 RUN addgroup k8s-operator && useradd -G k8s-operator operator-user
 

@@ -24,7 +24,9 @@ foreach (var converter in typeof(Program).Assembly.GetTypes()
     builder.Services.AddTransient(typeof(IDockerContainerConverter), converter);
 }
 
-var app = builder.Build();
-app.UseKubernetesOperator();
+builder.Services.AddKubernetesOperator()
+    .RegisterComponents();
 
-await app.RunOperatorAsync(args);
+var app = builder.Build();
+
+await app.RunAsync();

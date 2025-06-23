@@ -1,4 +1,4 @@
-﻿using KubeOps.Operator.Entities.Annotations;
+﻿using KubeOps.Abstractions.Entities.Attributes;
 
 namespace SentryOperator.Entities;
 

@@ -4,6 +4,7 @@ using SentryOperator.Docker.Converters;
 using SentryOperator.Entities;
 using YamlDotNet.Core;
 using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.NodeDeserializers;
 
 namespace SentryOperator.Docker;
 
@@ -66,6 +67,7 @@ public class DockerComposeConverter
     {
         var mergingParser = new MergingParser(new Parser(new StringReader(dockerComposeYaml)));
         var dockerComposeFile = new DeserializerBuilder()
+            .WithNodeDeserializer(inner => new ArrayAsDictionaryNodeDeserializer(inner), syntax => syntax.InsteadOf<DictionaryNodeDeserializer>())
             .Build()
             .Deserialize<DockerCompose>(mergingParser);
 

@@ -1,10 +1,10 @@
 ﻿using k8s.Models;
-using KubeOps.Operator.Entities;
-using KubeOps.Operator.Entities.Annotations;
+using KubeOps.Abstractions.Entities;
+using KubeOps.Abstractions.Entities.Attributes;
 
 namespace SentryOperator.Entities;
 
-[IgnoreEntity]
+[Ignore]
 [KubernetesEntity(Group = "cert-manager.io", ApiVersion = "v1", Kind = "Certificate", PluralName = "certificates")]
 public class Certificate : CustomKubernetesEntity<Certificate.CertificateSpec, Certificate.CertificateStatus>
 {

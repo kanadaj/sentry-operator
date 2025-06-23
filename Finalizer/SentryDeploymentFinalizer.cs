@@ -1,10 +1,10 @@
 ﻿using k8s.Models;
-using KubeOps.Operator.Finalizer;
+using KubeOps.Abstractions.Finalizer;
 using SentryOperator.Entities;
 
 namespace SentryOperator.Finalizer;
 
-public class SentryDeploymentFinalizer : IResourceFinalizer<SentryDeployment>
+public class SentryDeploymentFinalizer : IEntityFinalizer<SentryDeployment>
 {
     private readonly ILogger<SentryDeploymentFinalizer> _logger;
 
@@ -13,7 +13,7 @@ public class SentryDeploymentFinalizer : IResourceFinalizer<SentryDeployment>
         _logger = logger;
     }
 
-    public Task FinalizeAsync(SentryDeployment entity)
+    public Task FinalizeAsync(SentryDeployment entity, CancellationToken cancellationToken)
     {
         _logger.LogInformation("Entity {Name} called {FinalizeAsyncName}", entity.Name(), nameof(FinalizeAsync));
 
