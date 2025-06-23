@@ -67,8 +67,8 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
         var services = resources.OfType<V1Service>().ToList();
         var deployments = resources.OfType<V1Deployment>().ToList();
 
-        var actualServices = await _client.ListAsync<V1Service>(entity.Namespace());
-        var actualDeployments = await _client.ListAsync<V1Deployment>(entity.Namespace());
+        var actualServices = await _client.ListAsync<V1Service>(entity.Namespace(), cancellationToken: cancellationToken);
+        var actualDeployments = await _client.ListAsync<V1Deployment>(entity.Namespace(), cancellationToken: cancellationToken);
 
         if (!CheckIfUpdateIsNeeded(services, actualServices, deployments, actualDeployments, entity))
         {
@@ -77,7 +77,7 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
                 entity.Status.Status = "Ready";
                 entity.Status.Message = "Sentry deployment is ready";
                 entity.Status.LastVersion = configChecksum;
-                await _client.UpdateStatusAsync(entity);
+                await _client.UpdateStatusAsync(entity, CancellationToken.None);
             }
 
             return;
@@ -85,7 +85,7 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
 
         entity.Status.Status = "Updating";
         entity.Status.Message = "Updating Sentry deployment";
-        await _client.UpdateStatusAsync(entity);
+        await _client.UpdateStatusAsync(entity, CancellationToken.None);
 
         foreach (var service in services)
         {
@@ -95,7 +95,7 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
             if (svc == null)
             {
                 service.AddOwnerReference(entity.MakeOwnerReference());
-                await _client.CreateAsync(service);
+                await _client.CreateAsync(service, CancellationToken.None);
             }
             else if (svc.GetLabel("app.kubernetes.io/managed-by") == "sentry-operator")
             {
@@ -103,7 +103,7 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
                 {
                     service.Metadata.ResourceVersion = svc.Metadata.ResourceVersion;
                     service.AddOwnerReference(entity.MakeOwnerReference());
-                    await _client.UpdateAsync(service);
+                    await _client.UpdateAsync(service, CancellationToken.None);
                 }
             }
         }
@@ -117,7 +117,7 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
             if (actualDeployment == null)
             {
                 deployment.AddOwnerReference(entity.MakeOwnerReference());
-                await _client.CreateAsync(deployment);
+                await _client.CreateAsync(deployment, CancellationToken.None);
             }
             else if (actualDeployment.GetLabel("app.kubernetes.io/managed-by") == "sentry-operator")
             {
@@ -128,7 +128,7 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
                     _logger.LogInformation("Updating deployment {DeploymentName}", deployment.Name());
                     deployment.Metadata.ResourceVersion = actualDeployment.Metadata.ResourceVersion;
                     deployment.AddOwnerReference(entity.MakeOwnerReference());
-                    await _client.UpdateAsync(deployment);
+                    await _client.UpdateAsync(deployment, CancellationToken.None);
 
                     // if (deployment.Metadata.Name == "snuba-api")
                     // {
@@ -142,7 +142,7 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
         {
             if (deployments.All(d => d.Name() != deployment.Name()) && deployment.GetLabel("app.kubernetes.io/managed-by") == "sentry-operator")
             {
-                await _client.DeleteAsync(deployment);
+                await _client.DeleteAsync(deployment, CancellationToken.None);
             }
         }
 
@@ -154,17 +154,17 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
                 _logger.LogInformation("Requeuing event");
                 
                 entity.Status.Status = "Error creating certificate";
-                await _client.UpdateStatusAsync(entity);
+                await _client.UpdateStatusAsync(entity, CancellationToken.None);
                 
                 return;
             }
         }
 
-        entity = (await _client.GetAsync<SentryDeployment>(entity.Name(), entity.Namespace()))!;
+        entity = (await _client.GetAsync<SentryDeployment>(entity.Name(), entity.Namespace(), CancellationToken.None))!;
         entity.Status.Status = "Ready";
         entity.Status.Message = "Sentry deployment is ready";
         entity.Status.LastVersion = configChecksum;
-        await _client.UpdateStatusAsync(entity);
+        await _client.UpdateStatusAsync(entity, CancellationToken.None);
         //return ResourceControllerResult.RequeueEvent(TimeSpan.FromSeconds(15));
         return;
     }
@@ -646,16 +646,16 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
                 {
                     _logger.LogError("Error generating credentials: {Error}", error);
 
-                    entity = (await _client.GetAsync<SentryDeployment>(entity.Name(), entity.Namespace()))!;
+                    entity = (await _client.GetAsync<SentryDeployment>(entity.Name(), entity.Namespace(), CancellationToken.None))!;
                     entity.Status.Status = "Error";
                     entity.Status.Message = error;
-                    await _client.UpdateStatusAsync(entity);
+                    await _client.UpdateStatusAsync(entity, CancellationToken.None);
 
                     return;
                 }
 
                 configMap.Data["credentials.json"] = credentials;
-                await _client.UpdateAsync(configMap);
+                await _client.UpdateAsync(configMap, CancellationToken.None);
             }, cancellationToken);
     }
 
