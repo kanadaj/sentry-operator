@@ -62,7 +62,7 @@ public class SentryDeploymentConfig
             .Replace("$SENTRY_IMAGE", Image ?? $"getsentry/sentry:{version}")
             .Replace("$SNUBA_IMAGE", SnubaImage ?? $"getsentry/snuba:{version}")
             .Replace("$RELAY_IMAGE", RelayImage ?? $"getsentry/relay:{version}")
-            .Replace("TASKBROKER_IMAGE", TaskbrokerImage ?? $"getsentry/taskbroker:{version}")
+            .Replace("$TASKBROKER_IMAGE", TaskbrokerImage ?? $"getsentry/taskbroker:{version}")
             .Replace("$SYMBOLICATOR_IMAGE", SymbolicatorImage ?? $"getsentry/symbolicator:{version}")
             .Replace("$VROOM_IMAGE", VroomImage ?? $"getsentry/vroom:{version}")
             .Replace("$WAL2JSON_VERSION", Wal2JsonVersion)
