@@ -67,17 +67,61 @@ public class SentryDeploymentCertificateConfig
     public string[] CustomHosts { get; set; } = Array.Empty<string>();
 }
 
-public class ResourceLimitConfig : Dictionary<string, V1ResourceRequirements>
+public class ResourceLimitConfig : Dictionary<string, ResourceRequirementDefinition>
 {
-    public V1ResourceRequirements? Web { get; set; }
-    public V1ResourceRequirements? Worker { get; set; }
-    public V1ResourceRequirements? Cron { get; set; }
-    public V1ResourceRequirements? Snuba { get; set; }
-    public V1ResourceRequirements? Relay { get; set; }
-    public V1ResourceRequirements? Consumer { get; set; }
-    public V1ResourceRequirements? Ingest { get; set; }
-    public V1ResourceRequirements? Forwarder { get; set; }
-    public V1ResourceRequirements? Replacer { get; set; }
+    public ResourceRequirementDefinition? Web { get; set; }
+    public ResourceRequirementDefinition? Worker { get; set; }
+    public ResourceRequirementDefinition? Cron { get; set; }
+    public ResourceRequirementDefinition? Snuba { get; set; }
+    public ResourceRequirementDefinition? Relay { get; set; }
+    public ResourceRequirementDefinition? Consumer { get; set; }
+    public ResourceRequirementDefinition? Ingest { get; set; }
+    public ResourceRequirementDefinition? Forwarder { get; set; }
+    public ResourceRequirementDefinition? Replacer { get; set; }
     // ReSharper disable once InconsistentNaming
-    public V1ResourceRequirements? GeoIP { get; set; }
+    public ResourceRequirementDefinition? GeoIP { get; set; }
+}
+
+public class ResourceRequirementDefinition
+{
+    public ResourceRequirement? Limits { get; set; }
+    public ResourceRequirement? Requests { get; set; }
+}
+
+public class ResourceRequirement
+{
+    public string? Cpu { get; set; }
+    public string? Memory { get; set; }
+    
+    public ResourceRequirement(string? cpu, string? memory)
+    {
+        Cpu = cpu;
+        Memory = memory;
+    }
+    
+    public ResourceRequirement() {}
+    
+    public static implicit operator Dictionary<string, ResourceQuantity>(ResourceRequirement requirement)
+    {
+        return requirement.ToDictionary();
+    }
+
+    public Dictionary<string, ResourceQuantity> ToDictionary()
+    {
+        var result = new Dictionary<string, ResourceQuantity>();
+        if (Cpu != null)
+        {
+            result["cpu"] = new ResourceQuantity(Cpu);
+        }
+        if (Memory != null)
+        {
+            result["memory"] = new ResourceQuantity(Memory);
+        }
+        return result;
+    }
+    
+    public override string ToString()
+    {
+        return $"Cpu: {Cpu}, Memory: {Memory}";
+    }
 }

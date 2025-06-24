@@ -1,0 +1,24 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validators
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    caBundle: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJsakNDQVR1Z0F3SUJBZ0lJSUZCWmVvOGM2UUF3Q2dZSUtvWkl6ajBFQXdRd1BqRVRNQkVHQTFVRUJ4TUsKUzNWaVpYSnVaWFJsY3pFTU1Bb0dBMVVFQmhNRFJFVldNUmt3RndZRFZRUURFeEJQY0dWeVlYUnZjaUJTYjI5MApJRU5CTUI0WERUSTFNRFl5TkRBd01EQXdNRm9YRFRNd01EWXlOREF3TURBd01Gb3dQakVUTUJFR0ExVUVCeE1LClMzVmlaWEp1WlhSbGN6RU1NQW9HQTFVRUJoTURSRVZXTVJrd0Z3WURWUVFERXhCUGNHVnlZWFJ2Y2lCU2IyOTAKSUVOQk1Ga3dFd1lIS29aSXpqMENBUVlJS29aSXpqMERBUWNEUWdBRVhaUzBIVklWM1dNMEJMenJzTDg2bnBVawp3MGpPZkIvVW1sSk5vd2xCQkNhYTF0ekNpTnQybXBBUmlYOHBlTW0ycHp2a2Naa1lFb1hSNTc4cit0dEducU1qCk1DRXdEd1lEVlIwVEFRSC9CQVV3QXdFQi96QU9CZ05WSFE4QkFmOEVCQU1DQVNZd0NnWUlLb1pJemowRUF3UUQKU1FBd1JnSWhBUE5vai93ZlE5WkVxWTUwYWk4eVA4WW1EWGhEZ2wyNDhJMmxGRENoODNsdkFpRUE0UXVBMk03QwpBdUFhZCt1Z1hvRkdIUVdrMlpsZWx0S2hTNW1UZkMxNUw5ND0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQ==
+    service:
+      name: operator
+      path: /validate/sentrydeployment
+  matchPolicy: Exact
+  name: validate.sentrydeployment.sentry.io.v1
+  rules:
+  - apiGroups:
+    - sentry.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    resources:
+    - sentrydeployments
+  sideEffects: None

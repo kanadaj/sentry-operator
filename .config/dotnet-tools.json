@@ -3,10 +3,11 @@
   "isRoot": true,
   "tools": {
     "kubeops.cli": {
-      "version": "9.0.0",
+      "version": "9.8.2",
       "commands": [
         "kubeops"
-      ]
+      ],
+      "rollForward": false
     }
   }
 }

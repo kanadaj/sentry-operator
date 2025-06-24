@@ -287,7 +287,7 @@ public abstract class ContainerConverter : IDockerContainerConverter
     {
         if ((sentryDeployment.Spec.Resources?.TryGetValue(name, out var resource) ?? false) && resource.Requests != null)
         {
-            return resource.Requests;
+            return resource.Requests.ToDictionary();
         }
         
         return name switch
@@ -336,7 +336,7 @@ public abstract class ContainerConverter : IDockerContainerConverter
     {
         if ((sentryDeployment.Spec.Resources?.TryGetValue(name, out var resource) ?? false) && resource.Limits != null)
         {
-            return resource.Limits;
+            return resource.Limits.ToDictionary();
         }
         
         return name switch
