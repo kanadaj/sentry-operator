@@ -11,7 +11,7 @@ namespace SentryOperator.Docker;
 public class DockerComposeConverter
 {
     private readonly IEnumerable<IDockerContainerConverter> _converters;
-    
+
     /// <summary>
     /// These services should be managed by the user and not by the operator because they require external resources and tuning.
     /// An external operator may be used for ease of use. For this reason, this operator will not manage these services.
@@ -36,11 +36,11 @@ public class DockerComposeConverter
         _converters = converters;
     }
 
-    public List<IKubernetesObject<V1ObjectMeta>> Convert(string dockerComposeYaml,
-        SentryDeployment sentryDeployment)
+    public List<IKubernetesObject<V1ObjectMeta>> Convert(string dockerComposeYaml, SentryDeployment sentryDeployment)
     {
-        var dockerCompose = Parse(dockerComposeYaml);
-        var result = new List<IKubernetesObject<V1ObjectMeta>>(); 
+        var dockerCompose = Parse(dockerComposeYaml, sentryDeployment.Spec.DockerComposeOverrides);
+        
+        var result = new List<IKubernetesObject<V1ObjectMeta>>();
         foreach (var service in dockerCompose.Services!)
         {
             if (_ignoredServices.Contains(service.Key))
@@ -48,6 +48,7 @@ public class DockerComposeConverter
                 _logger.LogInformation("Ignoring service {ServiceName}", service.Key);
                 continue;
             }
+
             _logger.LogInformation("Converting service {ServiceName}", service.Key);
             var converter = _converters.OrderByDescending(x => x.Priority).First(x => x.CanConvert(service.Key, service.Value));
 
@@ -63,13 +64,35 @@ public class DockerComposeConverter
         return result;
     }
 
-    public DockerCompose Parse(string dockerComposeYaml)
+    public DockerCompose Parse(string dockerComposeYaml, string? overrides)
     {
         var mergingParser = new MergingParser(new Parser(new StringReader(dockerComposeYaml)));
-        var dockerComposeFile = new DeserializerBuilder()
+        var deserializer = new DeserializerBuilder()
             .WithNodeDeserializer(inner => new ArrayAsDictionaryNodeDeserializer(inner), syntax => syntax.InsteadOf<DictionaryNodeDeserializer>())
-            .Build()
+            .Build();
+        
+        var dockerComposeFile = deserializer
             .Deserialize<DockerCompose>(mergingParser);
+
+        if (overrides != null)
+        {
+            var mergedParser = new MergingParser(new Parser(new StringReader(dockerComposeYaml+"\n"+overrides)));
+
+            var overridesData = deserializer.Deserialize<DockerCompose>(mergedParser);
+
+            if (overridesData.Services != null)
+            {
+                foreach (var service in overridesData.Services)
+                {
+                    if (dockerComposeFile.Services == null)
+                    {
+                        dockerComposeFile.Services = new Dictionary<string, DockerService>();
+                    }
+
+                    dockerComposeFile.Services[service.Key] = service.Value;
+                }
+            }
+        }
 
         return dockerComposeFile;
     }

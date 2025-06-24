@@ -1,6 +1,7 @@
 using KubeOps.Operator;
 using SentryOperator.Docker;
 using SentryOperator.Docker.Converters;
+using SentryOperator.Services;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -16,6 +17,7 @@ builder.Services.AddLogging(logging =>
         .CreateLogger());
 });
 builder.Services.AddTransient<DockerComposeConverter>();
+builder.Services.AddHttpClient<RemoteFileService>();
 
 // Find all non-abstract IDockerContainerConverter implementations and register them.
 foreach (var converter in typeof(Program).Assembly.GetTypes()

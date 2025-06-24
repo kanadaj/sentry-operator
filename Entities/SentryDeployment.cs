@@ -15,6 +15,9 @@ public class SentryDeployment : CustomKubernetesEntity<SentryDeployment.SentryDe
         [Description("The URL of the docker-compose.yml file; if specified we will use the version for the images but the docker-compose for the container architecture")]
         public string? DockerComposeUrl { get; set; }
         
+        [Description("Custom YAML that will be merged into the docker-compose.yml file; this is useful for overriding the default configuration")]
+        public string? DockerComposeOverrides { get; set; }
+        
         [Description("The config for the Sentry deployment")]
         public SentryDeploymentConfig? Config { get; set; }
         

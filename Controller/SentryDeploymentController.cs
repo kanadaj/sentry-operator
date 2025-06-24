@@ -14,6 +14,7 @@ using SentryOperator.Docker;
 using SentryOperator.Entities;
 using SentryOperator.Extensions;
 using SentryOperator.Finalizer;
+using SentryOperator.Services;
 
 namespace SentryOperator.Controller;
 
@@ -26,25 +27,23 @@ namespace SentryOperator.Controller;
 [GenericRbac(Resources = new[] { "certificates" }, Groups = new[] { "cert-manager.io" }, Verbs = RbacVerb.Get | RbacVerb.Delete | RbacVerb.Patch | RbacVerb.Create)]
 public class SentryDeploymentController : IEntityController<SentryDeployment>
 {
-    private const string DockerComposeUrl = "https://raw.githubusercontent.com/getsentry/self-hosted/master/docker-compose.yml";
+    public const string DockerComposeUrl = "https://raw.githubusercontent.com/getsentry/self-hosted/master/docker-compose.yml";
     private readonly ILogger<SentryDeploymentController> _logger;
     private readonly EntityFinalizerAttacher<SentryDeploymentFinalizer, SentryDeployment> _finalizer;
-    private readonly HttpClient _httpClient;
+    private readonly RemoteFileService _remoteFileService;
     private readonly IKubernetesClient _client;
-    private readonly IDistributedCache _cache;
     private readonly EventPublisher _eventPublisher;
     private readonly DockerComposeConverter _dockerComposeConverter;
 
-    public SentryDeploymentController(ILogger<SentryDeploymentController> logger, EntityFinalizerAttacher<SentryDeploymentFinalizer, SentryDeployment> finalizer, IHttpClientFactory httpClientFactory, IKubernetesClient client,
-        IDistributedCache cache, EventPublisher eventPublisher, DockerComposeConverter dockerComposeConverter)
+    public SentryDeploymentController(ILogger<SentryDeploymentController> logger, EntityFinalizerAttacher<SentryDeploymentFinalizer, SentryDeployment> finalizer,
+        RemoteFileService remoteFileService, EventPublisher eventPublisher, DockerComposeConverter dockerComposeConverter, IKubernetesClient client)
     {
         _logger = logger;
         _finalizer = finalizer;
+        _remoteFileService = remoteFileService;
         _client = client;
-        _cache = cache;
         _eventPublisher = eventPublisher;
         _dockerComposeConverter = dockerComposeConverter;
-        _httpClient = httpClientFactory.CreateClient();
     }
 
     public async Task ReconcileAsync(SentryDeployment entity, CancellationToken cancellationToken)
@@ -419,18 +418,16 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
         var entrypointUrl = $"https://raw.githubusercontent.com/getsentry/self-hosted/{entity.Spec.GetVersion()}/sentry/entrypoint.sh";
         var sentryConfPyUrl = $"https://raw.githubusercontent.com/getsentry/self-hosted/{entity.Spec.GetVersion()}/sentry/sentry.conf.example.py";
 
-        var cachedConfigTemplate = await _cache.GetOrSetAsync($"sentry-config-template:{entity.Spec.GetVersion()}", async () =>
+        var configRaw = await _remoteFileService.GetAsync(configUrl);
+        var entrypointRaw = await _remoteFileService.GetAsync(entrypointUrl);
+        var sentryConfPyRaw = await _remoteFileService.GetAsync(sentryConfPyUrl);
+        
+        var cachedConfigTemplate = new ConfigTemplate
         {
-            var configRaw = await _httpClient.GetStringAsync(configUrl);
-            var entrypointRaw = await _httpClient.GetStringAsync(entrypointUrl);
-            var sentryConfPyRaw = await _httpClient.GetStringAsync(sentryConfPyUrl);
-            return new ConfigTemplate
-            {
-                Config = configRaw,
-                Entrypoint = entrypointRaw,
-                SentryConfPy = sentryConfPyRaw
-            };
-        });
+            Config = configRaw,
+            Entrypoint = entrypointRaw,
+            SentryConfPy = sentryConfPyRaw
+        };
 
 
         // Generate a 50 character secret key
@@ -581,7 +578,7 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
         {
             var configUrl = $"https://raw.githubusercontent.com/getsentry/self-hosted/{entity.Spec.GetVersion()}/relay/config.example.yml";
 
-            var configRaw = await _httpClient.GetStringAsync(configUrl);
+            var configRaw = await _remoteFileService.GetAsync(configUrl);
 
             relayConfigMap = new V1ConfigMap
             {
@@ -668,7 +665,7 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
         string kafkaTopics;
         try
         {
-            var kafkaTopicsScriptRaw = await _httpClient.GetStringAsync(kafkaTopicsScriptUrl);
+            var kafkaTopicsScriptRaw = await _remoteFileService.GetAsync(kafkaTopicsScriptUrl);
 
             // Find the line that starts with 'NEEDED_KAFKA_TOPICS=' and extract the topics surrounded by a "
             var topicsRegex = new Regex(@"NEEDED_KAFKA_TOPICS=""(.*)""");
@@ -778,18 +775,7 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
             dockerComposeUrl = $"https://raw.githubusercontent.com/getsentry/self-hosted/{(entity.Spec.Version == "nightly" ? "master" : entity.Spec.Version)}/docker-compose.yml";
         }
 
-        var dockerComposeRaw = await _cache.GetStringAsync(dockerComposeUrl);
-        if (dockerComposeRaw == null)
-        {
-            dockerComposeRaw = await _httpClient.GetStringAsync(dockerComposeUrl);
-            if (!string.IsNullOrWhiteSpace(dockerComposeRaw))
-            {
-                await _cache.SetStringAsync(dockerComposeUrl, dockerComposeRaw, new DistributedCacheEntryOptions()
-                {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(24)
-                });
-            }
-        }
+        var dockerComposeRaw = await _remoteFileService.GetAsync(dockerComposeUrl);
 
         dockerComposeRaw = (entity.Spec.Config ?? new()).ReplaceVariables(dockerComposeRaw, entity.Spec.Version ?? "nightly");
         return _dockerComposeConverter.Convert(dockerComposeRaw, entity);
@@ -798,7 +784,7 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
 
 public class ConfigTemplate
 {
-    public string Config { get; set; }
-    public string Entrypoint { get; set; }
-    public string SentryConfPy { get; set; }
+    public required string Config { get; set; }
+    public required string Entrypoint { get; set; }
+    public required string SentryConfPy { get; set; }
 }
