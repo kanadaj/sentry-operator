@@ -31,14 +31,29 @@ public class SentryDeploymentConfig
     [Description("The version of Wal2Json to use")]
     public string Wal2JsonVersion { get; set; } = "latest";
     
+    [Description("How much to delay starting health checks")]
+    public string HealthCheckStartPeriod { get; set; } = "10s";
+    
     [Description("The interval to use for health checks")]
     public string HealthCheckInterval { get; set; } = "30s";
     
     [Description("The timeout to use for health checks")]
-    public string HealthCheckTimeout { get; set; } = "60s";
+    public string HealthCheckTimeout { get; set; } = "90s";
     
     [Description("The amount of retries to use for health checks")]
     public string HealthCheckRetries { get; set; } = "10";
+    
+    [Description("How much to delay starting health checks")]
+    public string HealthCheckFileStartPeriod { get; set; } = "600s";
+    
+    [Description("The interval to use for health checks")]
+    public string HealthCheckFileInterval { get; set; } = "60s";
+    
+    [Description("The timeout to use for health checks")]
+    public string HealthCheckFileTimeout { get; set; } = "10s";
+    
+    [Description("The amount of retries to use for health checks")]
+    public string HealthCheckFileRetries { get; set; } = "3";
     
     [Description("The config for the Postgres database")]
     public PostgresConfig? Postgres { get; set; }
@@ -66,8 +81,13 @@ public class SentryDeploymentConfig
             .Replace("$SYMBOLICATOR_IMAGE", SymbolicatorImage ?? $"getsentry/symbolicator:{version}")
             .Replace("$VROOM_IMAGE", VroomImage ?? $"getsentry/vroom:{version}")
             .Replace("$WAL2JSON_VERSION", Wal2JsonVersion)
+            .Replace("HEALTHCHECK_START_PERIOD", HealthCheckStartPeriod)
             .Replace("$HEALTHCHECK_INTERVAL", HealthCheckInterval)
             .Replace("$HEALTHCHECK_TIMEOUT", HealthCheckTimeout)
-            .Replace("$HEALTHCHECK_RETRIES", HealthCheckRetries);
+            .Replace("$HEALTHCHECK_RETRIES", HealthCheckRetries)
+            .Replace("$HEALTHCHECK_FILE_START_PERIOD", HealthCheckFileStartPeriod)
+            .Replace("$HEALTHCHECK_FILE_INTERVAL", HealthCheckFileInterval)
+            .Replace("$HEALTHCHECK_FILE_TIMEOUT", HealthCheckFileTimeout)
+            .Replace("$HEALTHCHECK_FILE_RETRIES", HealthCheckFileRetries);
     }
 }
