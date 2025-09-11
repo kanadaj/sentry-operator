@@ -134,7 +134,7 @@ public class DockerCompose
 public class PullPolicy
 {
     [YamlMember(Alias = "pull_policy")]
-    public bool Policy { get; set; }
+    public string Policy { get; set; }
 }
 
 public class DockerVolume
