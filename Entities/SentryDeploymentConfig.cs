@@ -22,6 +22,9 @@ public class SentryDeploymentConfig
     [Description("The image to use for Relay")]
     public string? RelayImage { get; set; }
     
+    [Description("The image to use for Uptime")]
+    public string? UptimeImage { get; set; }
+    
     [Description("The image to use for Taskbroker")]
     public string? TaskbrokerImage { get; set; }
     
@@ -80,6 +83,7 @@ public class SentryDeploymentConfig
             .Replace("$SENTRY_IMAGE", Image ?? $"{Registry + (Registry == null || Registry.EndsWith('/') ? "" : "/")}getsentry/sentry:{version}")
             .Replace("$SNUBA_IMAGE", SnubaImage ?? $"{Registry + (Registry == null || Registry.EndsWith('/') ? "" : "/")}getsentry/snuba:{version}")
             .Replace("$RELAY_IMAGE", RelayImage ?? $"{Registry + (Registry == null || Registry.EndsWith('/') ? "" : "/")}getsentry/relay:{version}")
+            .Replace("$UPTIME_CHECKER_IMAGE", UptimeImage ?? $"{Registry + (Registry == null || Registry.EndsWith('/') ? "" : "/")}getsentry/uptime-checker:{version}")
             .Replace("$TASKBROKER_IMAGE", TaskbrokerImage ?? $"{Registry + (Registry == null || Registry.EndsWith('/') ? "" : "/")}getsentry/taskbroker:{version}")
             .Replace("$SYMBOLICATOR_IMAGE", SymbolicatorImage ?? $"{Registry + (Registry == null || Registry.EndsWith('/') ? "" : "/")}getsentry/symbolicator:{version}")
             .Replace("$VROOM_IMAGE", VroomImage ?? $"{Registry + (Registry == null || Registry.EndsWith('/') ? "" : "/")}getsentry/vroom:{version}")
