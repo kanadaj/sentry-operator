@@ -46,6 +46,15 @@ public abstract class ContainerConverter : IDockerContainerConverter
             ? new[] { testString }
             : (service.Healthcheck?.Test as IEnumerable<object>)?.Select(x => x.ToString())
             .Where(x => x != "CMD" && x != "CMD-SHELL").ToArray();
+
+        if(service.Healthcheck != null)
+        {
+            service.Healthcheck.Interval ??= sentryDeployment.Spec.Config?.HealthCheckInterval;
+            service.Healthcheck.Timeout ??= sentryDeployment.Spec.Config?.HealthCheckTimeout;
+            service.Healthcheck.Retries ??= sentryDeployment.Spec.Config?.HealthCheckRetries;
+            service.Healthcheck.StartPeriod ??= sentryDeployment.Spec.Config?.HealthCheckStartPeriod;
+        }
+        
         var container = new V1Container()
         {
             Name = name,

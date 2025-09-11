@@ -51,6 +51,10 @@ spec:
                   bind:
                     description: You can either use a port number or an IP:PORT combo for SENTRY_BIND
                     type: string
+                  registry:
+                    description: The registry to use for images; defaults to docker.io
+                    nullable: true
+                    type: string
                   image:
                     description: The image to use for Sentry
                     nullable: true
@@ -78,6 +82,9 @@ spec:
                   wal2JsonVersion:
                     description: The version of Wal2Json to use
                     type: string
+                  healthCheckStartPeriod:
+                    description: How much to delay starting health checks
+                    type: string
                   healthCheckInterval:
                     description: The interval to use for health checks
                     type: string
@@ -85,6 +92,18 @@ spec:
                     description: The timeout to use for health checks
                     type: string
                   healthCheckRetries:
+                    description: The amount of retries to use for health checks
+                    type: string
+                  healthCheckFileStartPeriod:
+                    description: How much to delay starting health checks
+                    type: string
+                  healthCheckFileInterval:
+                    description: The interval to use for health checks
+                    type: string
+                  healthCheckFileTimeout:
+                    description: The timeout to use for health checks
+                    type: string
+                  healthCheckFileRetries:
                     description: The amount of retries to use for health checks
                     type: string
                   postgres:
