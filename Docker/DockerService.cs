@@ -105,7 +105,7 @@ public class DockerCompose
     [YamlMember(Alias = "x-restart-policy")]
     public DockerService RestartPolicy { get; set; }
     
-    [YamlMember(Alias = "x-pill-policy")]
+    [YamlMember(Alias = "x-pull-policy")]
     public PullPolicy? PullPolicy { get; set; }
 
     [YamlMember(Alias = "x-depends_on-healthy")]
