@@ -10,6 +10,9 @@ public class SentryDeploymentConfig
     [Description("You can either use a port number or an IP:PORT combo for SENTRY_BIND")]
     public string Bind { get; set; } = "9000";
     
+    [Description("The registry to use for images; defaults to docker.io")]
+    public string? Registry { get; set; }
+    
     [Description("The image to use for Sentry")]
     public string? Image { get; set; }
     
@@ -74,12 +77,12 @@ public class SentryDeploymentConfig
     {
         return yaml.Replace("$SENTRY_EVENT_RETENTION_DAYS", EventRetentionDays.ToString())
             .Replace("$SENTRY_BIND", Bind)
-            .Replace("$SENTRY_IMAGE", Image ?? $"getsentry/sentry:{version}")
-            .Replace("$SNUBA_IMAGE", SnubaImage ?? $"getsentry/snuba:{version}")
-            .Replace("$RELAY_IMAGE", RelayImage ?? $"getsentry/relay:{version}")
-            .Replace("$TASKBROKER_IMAGE", TaskbrokerImage ?? $"getsentry/taskbroker:{version}")
-            .Replace("$SYMBOLICATOR_IMAGE", SymbolicatorImage ?? $"getsentry/symbolicator:{version}")
-            .Replace("$VROOM_IMAGE", VroomImage ?? $"getsentry/vroom:{version}")
+            .Replace("$SENTRY_IMAGE", Image ?? $"{Registry + (Registry == null || Registry.EndsWith('/') ? "" : "/")}getsentry/sentry:{version}")
+            .Replace("$SNUBA_IMAGE", SnubaImage ?? $"{Registry + (Registry == null || Registry.EndsWith('/') ? "" : "/")}getsentry/snuba:{version}")
+            .Replace("$RELAY_IMAGE", RelayImage ?? $"{Registry + (Registry == null || Registry.EndsWith('/') ? "" : "/")}getsentry/relay:{version}")
+            .Replace("$TASKBROKER_IMAGE", TaskbrokerImage ?? $"{Registry + (Registry == null || Registry.EndsWith('/') ? "" : "/")}getsentry/taskbroker:{version}")
+            .Replace("$SYMBOLICATOR_IMAGE", SymbolicatorImage ?? $"{Registry + (Registry == null || Registry.EndsWith('/') ? "" : "/")}getsentry/symbolicator:{version}")
+            .Replace("$VROOM_IMAGE", VroomImage ?? $"{Registry + (Registry == null || Registry.EndsWith('/') ? "" : "/")}getsentry/vroom:{version}")
             .Replace("$WAL2JSON_VERSION", Wal2JsonVersion)
             .Replace("$HEALTHCHECK_START_PERIOD", HealthCheckStartPeriod)
             .Replace("$HEALTHCHECK_INTERVAL", HealthCheckInterval)
