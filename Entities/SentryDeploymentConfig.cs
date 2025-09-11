@@ -81,7 +81,7 @@ public class SentryDeploymentConfig
             .Replace("$SYMBOLICATOR_IMAGE", SymbolicatorImage ?? $"getsentry/symbolicator:{version}")
             .Replace("$VROOM_IMAGE", VroomImage ?? $"getsentry/vroom:{version}")
             .Replace("$WAL2JSON_VERSION", Wal2JsonVersion)
-            .Replace("HEALTHCHECK_START_PERIOD", HealthCheckStartPeriod)
+            .Replace("$HEALTHCHECK_START_PERIOD", HealthCheckStartPeriod)
             .Replace("$HEALTHCHECK_INTERVAL", HealthCheckInterval)
             .Replace("$HEALTHCHECK_TIMEOUT", HealthCheckTimeout)
             .Replace("$HEALTHCHECK_RETRIES", HealthCheckRetries)
