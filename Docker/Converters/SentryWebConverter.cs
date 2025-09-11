@@ -31,6 +31,15 @@ public class SentryWebConverter : SentryContainerConverter
             "pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh run web"
         };
 
+        var healthcheckIntervalString = sentryDeployment.Spec.Config?.HealthCheckInterval;
+        int healthcheckInterval = healthcheckIntervalString != null ? int.Parse(healthcheckIntervalString.Trim('s')) : 30;
+        var healthcheckTimeoutString = sentryDeployment.Spec.Config?.HealthCheckTimeout;
+        int healthcheckTimeout = healthcheckTimeoutString != null ? int.Parse(healthcheckTimeoutString.Trim('s')) : 60;
+        var healthcheckRetriesString = sentryDeployment.Spec.Config?.HealthCheckRetries;
+        int healthcheckRetries = healthcheckRetriesString != null ? int.Parse(healthcheckRetriesString) : 10;
+        var healthcheckStartPeriodString = sentryDeployment.Spec.Config?.HealthCheckStartPeriod;
+        int healthcheckStartPeriod = healthcheckStartPeriodString != null ? int.Parse(healthcheckStartPeriodString.Trim('s')) : 10;
+
         podSpec.Containers[0].ReadinessProbe = new V1Probe
         {
             HttpGet = new V1HTTPGetAction
@@ -38,7 +47,11 @@ public class SentryWebConverter : SentryContainerConverter
                 Port = 9000,
                 Path = "/_health/",
             },
-            InitialDelaySeconds = 3
+            InitialDelaySeconds = healthcheckStartPeriod,
+            PeriodSeconds = healthcheckInterval,
+            TimeoutSeconds = healthcheckTimeout,
+            FailureThreshold = healthcheckRetries,
+            SuccessThreshold = 1,
         };
         
         podSpec.Containers[0].LivenessProbe = new V1Probe
@@ -48,7 +61,11 @@ public class SentryWebConverter : SentryContainerConverter
                 Port = 9000,
                 Path = "/_health/"
             },
-            InitialDelaySeconds = 3
+            InitialDelaySeconds = healthcheckStartPeriod,
+            PeriodSeconds = healthcheckInterval,
+            TimeoutSeconds = healthcheckTimeout,
+            FailureThreshold = healthcheckRetries,
+            SuccessThreshold = 1,
         };
         
         return podSpec;
