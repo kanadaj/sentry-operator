@@ -114,11 +114,11 @@ public class DockerCompose
     [YamlMember(Alias = "x-depends_on-default")]
     public DependsOn DependsOnDefault { get; set; }
 
-    [YamlMember(Alias = "x-healthcheck-defaults")]
-    public Healthcheck HealthcheckDefaults { get; set; }
-
-    [YamlMember(Alias = "x-file-healthcheck")]
-    public Healthcheck FileHealthcheck { get; set; }
+    // [YamlMember(Alias = "x-healthcheck-defaults")]
+    // public Healthcheck HealthcheckDefaults { get; set; }
+    //
+    // [YamlMember(Alias = "x-file-healthcheck")]
+    // public Healthcheck FileHealthcheck { get; set; }
 
     [YamlMember(Alias = "x-sentry-defaults")]
     public DockerService SentryDefaults { get; set; }
