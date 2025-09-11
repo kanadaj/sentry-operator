@@ -47,12 +47,18 @@ public abstract class ContainerConverter : IDockerContainerConverter
             : (service.Healthcheck?.Test as IEnumerable<object>)?.Select(x => x.ToString())
             .Where(x => x != "CMD" && x != "CMD-SHELL").ToArray();
 
+        int totalRetries = 0;
         if(service.Healthcheck != null)
         {
             service.Healthcheck.Interval ??= sentryDeployment.Spec.Config?.HealthCheckInterval;
             service.Healthcheck.Timeout ??= sentryDeployment.Spec.Config?.HealthCheckTimeout;
             service.Healthcheck.Retries ??= sentryDeployment.Spec.Config?.HealthCheckRetries;
             service.Healthcheck.StartPeriod ??= sentryDeployment.Spec.Config?.HealthCheckStartPeriod;
+            totalRetries = int.Parse(service.Healthcheck.Retries);
+            if(int.TryParse(service.Healthcheck.StartPeriod?.Trim('s'), out var startPeriod) && int.TryParse(service.Healthcheck.Timeout?.Trim('s'), out var timeout))
+            {
+                totalRetries += startPeriod / timeout;
+            }
         }
         
         var container = new V1Container()
@@ -83,7 +89,7 @@ public abstract class ContainerConverter : IDockerContainerConverter
                     {
                         Command = testCommands
                     },
-                    InitialDelaySeconds = int.Parse(service.Healthcheck.StartPeriod?.Trim('s') ?? "0"),
+                    InitialDelaySeconds = 0,
                     PeriodSeconds = int.Parse(service.Healthcheck.Interval?.Trim('s') ?? "0"),
                     TimeoutSeconds = int.Parse(service.Healthcheck.Timeout?.Trim('s') ?? "0"),
                     FailureThreshold = int.Parse(service.Healthcheck.Retries?.ToString() ?? "0"),
@@ -96,10 +102,10 @@ public abstract class ContainerConverter : IDockerContainerConverter
                     {
                         Command = testCommands
                     },
-                    InitialDelaySeconds = int.Parse(service.Healthcheck.StartPeriod?.Trim('s') ?? "0"),
+                    InitialDelaySeconds = int.Parse(service.Healthcheck.Interval?.Trim('s') ?? "0"),
                     PeriodSeconds = int.Parse(service.Healthcheck.Interval?.Trim('s') ?? "0"),
                     TimeoutSeconds = int.Parse(service.Healthcheck.Timeout?.Trim('s') ?? "0"),
-                    FailureThreshold = int.Parse(service.Healthcheck.Retries?.ToString() ?? "0"),
+                    FailureThreshold = totalRetries,
                 }
                 : null,
         };
