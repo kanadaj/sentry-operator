@@ -55,9 +55,9 @@ public abstract class ContainerConverter : IDockerContainerConverter
             service.Healthcheck.Retries ??= sentryDeployment.Spec.Config?.HealthCheckRetries;
             service.Healthcheck.StartPeriod ??= sentryDeployment.Spec.Config?.HealthCheckStartPeriod;
             totalRetries = int.Parse(service.Healthcheck.Retries);
-            if(int.TryParse(service.Healthcheck.StartPeriod?.Trim('s'), out var startPeriod) && int.TryParse(service.Healthcheck.Timeout?.Trim('s'), out var timeout))
+            if(int.TryParse(service.Healthcheck.StartPeriod?.Trim('s'), out var startPeriod) && int.TryParse(service.Healthcheck.Interval?.Trim('s'), out var interval))
             {
-                totalRetries += startPeriod / timeout;
+                totalRetries += startPeriod / interval;
             }
         }
         
@@ -95,19 +95,19 @@ public abstract class ContainerConverter : IDockerContainerConverter
                     FailureThreshold = int.Parse(service.Healthcheck.Retries?.ToString() ?? "0"),
                 }
                 : null,
-            ReadinessProbe = service.Healthcheck != null
-                ? new V1Probe
-                {
-                    Exec = new V1ExecAction
-                    {
-                        Command = testCommands
-                    },
-                    InitialDelaySeconds = int.Parse(service.Healthcheck.Interval?.Trim('s') ?? "0"),
-                    PeriodSeconds = int.Parse(service.Healthcheck.Interval?.Trim('s') ?? "0"),
-                    TimeoutSeconds = int.Parse(service.Healthcheck.Timeout?.Trim('s') ?? "0"),
-                    FailureThreshold = totalRetries,
-                }
-                : null,
+            // ReadinessProbe = service.Healthcheck != null
+            //     ? new V1Probe
+            //     {
+            //         Exec = new V1ExecAction
+            //         {
+            //             Command = testCommands
+            //         },
+            //         InitialDelaySeconds = int.Parse(service.Healthcheck.Interval?.Trim('s') ?? "0"),
+            //         PeriodSeconds = int.Parse(service.Healthcheck.Interval?.Trim('s') ?? "0"),
+            //         TimeoutSeconds = int.Parse(service.Healthcheck.Timeout?.Trim('s') ?? "0"),
+            //         FailureThreshold = totalRetries,
+            //     }
+            //     : null,
         };
         
         if (sentryDeployment.Spec.Environment != null)
