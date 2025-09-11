@@ -117,6 +117,9 @@ public class DockerCompose
     [YamlMember(Alias = "x-healthcheck-defaults")]
     public Healthcheck HealthcheckDefaults { get; set; }
 
+    [YamlMember(Alias = "x-file-healthcheck")]
+    public Healthcheck FileHealthcheck { get; set; }
+
     [YamlMember(Alias = "x-sentry-defaults")]
     public DockerService SentryDefaults { get; set; }
 
