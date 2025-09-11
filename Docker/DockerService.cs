@@ -104,6 +104,9 @@ public class DockerCompose
 {
     [YamlMember(Alias = "x-restart-policy")]
     public DockerService RestartPolicy { get; set; }
+    
+    [YamlMember(Alias = "x-pill-policy")]
+    public PullPolicy? PullPolicy { get; set; }
 
     [YamlMember(Alias = "x-depends_on-healthy")]
     public DependsOn DependsOnHealthy { get; set; }
@@ -126,6 +129,12 @@ public class DockerCompose
     [YamlMember(Alias = "volumes")] 
     public Dictionary<string, DockerVolume>? Volumes { get; set; }
     //public XProperties? XProperties { get; set; }
+}
+
+public class PullPolicy
+{
+    [YamlMember(Alias = "pull_policy")]
+    public bool Policy { get; set; }
 }
 
 public class DockerVolume

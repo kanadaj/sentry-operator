@@ -272,3 +272,5 @@ CodeCoverage/
 .pnpm/
 
 .tye/
+
+ca-key.pem
