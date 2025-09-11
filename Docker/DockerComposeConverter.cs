@@ -69,6 +69,7 @@ public class DockerComposeConverter
         var mergingParser = new MergingParser(new Parser(new StringReader(dockerComposeYaml)));
         var deserializer = new DeserializerBuilder()
             .WithNodeDeserializer(inner => new ArrayAsDictionaryNodeDeserializer(inner), syntax => syntax.InsteadOf<DictionaryNodeDeserializer>())
+            .IgnoreUnmatchedProperties()
             .Build();
         
         var dockerComposeFile = deserializer
