@@ -292,7 +292,8 @@ public abstract class ContainerConverter : IDockerContainerConverter
         
         return name switch
         {
-            "web" => sentryDeployment.Spec.Resources?.Web?.Requests ?? null,
+            "web" => (sentryDeployment.Spec.Resources?.Web?.Requests ?? null) ?? new Dictionary<string, ResourceQuantity>
+                { { "cpu", new ResourceQuantity("100m") }, { "memory", new ResourceQuantity("1.5Gi") }, },
             "worker" => sentryDeployment.Spec.Resources?.Worker?.Requests ?? new Dictionary<string, ResourceQuantity>
                 { { "cpu", new ResourceQuantity("100m") }, { "memory", new ResourceQuantity("2Gi") }, },
             "cron" => sentryDeployment.Spec.Resources?.Cron?.Requests ?? new Dictionary<string, ResourceQuantity>
@@ -341,7 +342,8 @@ public abstract class ContainerConverter : IDockerContainerConverter
         
         return name switch
         {
-            "web" => sentryDeployment.Spec.Resources?.Web?.Limits ?? null,
+            "web" => sentryDeployment.Spec.Resources?.Web?.Limits ?? new Dictionary<string, ResourceQuantity>
+                { { "cpu", new ResourceQuantity("500m") }, { "memory", new ResourceQuantity("3Gi") }, },
             "worker" => sentryDeployment.Spec.Resources?.Worker?.Limits ?? new Dictionary<string, ResourceQuantity>
                 { { "cpu", new ResourceQuantity("250m") }, { "memory", new ResourceQuantity("2.5Gi") }, },
             "cron" => sentryDeployment.Spec.Resources?.Cron?.Limits ?? new Dictionary<string, ResourceQuantity>
