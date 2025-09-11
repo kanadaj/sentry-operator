@@ -11,7 +11,9 @@ public class SentryCleanupConverter : SentryContainerConverter
 
     protected override V1Container GetBaseContainer(string name, DockerService service, SentryDeployment sentryDeployment)
     {
-        service.Image = $"getsentry/sentry:{sentryDeployment.Spec.GetVersion()}";
+        var image = sentryDeployment.Spec.Config?.Image ??
+                    $"{sentryDeployment.Spec.Config?.Registry + (sentryDeployment.Spec.Config?.Registry == null || sentryDeployment.Spec.Config.Registry.EndsWith('/') ? "" : "/")}getsentry/sentry:{sentryDeployment.Spec.GetVersion()}";
+        service.Image = image;
         
         var container = base.GetBaseContainer(name, service, sentryDeployment);
         
