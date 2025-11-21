@@ -75,6 +75,9 @@ public class SentryDeploymentConfig
 
     [Description("The config for mail")]
     public MailConfig? Mail { get; set; }
+    
+    [Description("The address to use for statsd")]
+    public string StatsdAddress { get; set; } = "statsd:9125";
 
     public string ReplaceVariables(string yaml, string version)
     {
@@ -95,6 +98,10 @@ public class SentryDeploymentConfig
             .Replace("$HEALTHCHECK_FILE_START_PERIOD", HealthCheckFileStartPeriod)
             .Replace("$HEALTHCHECK_FILE_INTERVAL", HealthCheckFileInterval)
             .Replace("$HEALTHCHECK_FILE_TIMEOUT", HealthCheckFileTimeout)
-            .Replace("$HEALTHCHECK_FILE_RETRIES", HealthCheckFileRetries);
+            .Replace("$HEALTHCHECK_FILE_RETRIES", HealthCheckFileRetries)
+            .Replace("SYMBOLICATOR_STATSD_ADDR", StatsdAddress)
+            .Replace("TASKBROKER_STATSD_ADDR", StatsdAddress)
+            .Replace("SNUBA_STATSD_ADDR", StatsdAddress)
+            ;
     }
 }
