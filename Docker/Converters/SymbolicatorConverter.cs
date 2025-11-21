@@ -18,6 +18,8 @@ public class SymbolicatorConverter : ContainerConverter
             Name = "http",
             Protocol = "TCP"
         });
+
+        container.SecurityContext.RunAsUser = 1001;
         
         return container;
     }

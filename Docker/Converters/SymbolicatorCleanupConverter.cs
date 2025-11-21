@@ -1,4 +1,5 @@
-﻿using SentryOperator.Docker.Volume;
+﻿using k8s.Models;
+using SentryOperator.Docker.Volume;
 using SentryOperator.Entities;
 
 namespace SentryOperator.Docker.Converters;
@@ -19,6 +20,15 @@ public class SymbolicatorCleanupConverter : CleanupConverter
         }
         
         yield return new ConfigMapVolumeRef("symbolicator-conf", "/etc/symbolicator/config.yml", "config.yml");
+    }
+
+    protected override V1Container GetBaseContainer(string name, DockerService service, SentryDeployment sentryDeployment)
+    {
+        var container = base.GetBaseContainer(name, service, sentryDeployment);
+        
+        container.SecurityContext.RunAsUser = 1001;
+        
+        return container;
     }
 
     protected override string CronSchedule => "55 23 * * *";
