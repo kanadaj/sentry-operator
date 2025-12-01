@@ -19,6 +19,7 @@ public class SymbolicatorConverter : ContainerConverter
             Protocol = "TCP"
         });
 
+        container.SecurityContext ??= new V1SecurityContext();
         container.SecurityContext.RunAsUser = 1001;
         
         return container;
