@@ -67,6 +67,10 @@ spec:
                     description: The image to use for Relay
                     nullable: true
                     type: string
+                  uptimeImage:
+                    description: The image to use for Uptime
+                    nullable: true
+                    type: string
                   taskbrokerImage:
                     description: The image to use for Taskbroker
                     nullable: true
@@ -184,6 +188,9 @@ spec:
                         nullable: true
                         type: string
                     type: object
+                  statsdAddress:
+                    description: The address to use for statsd
+                    type: string
                 type: object
               replicas:
                 additionalProperties:

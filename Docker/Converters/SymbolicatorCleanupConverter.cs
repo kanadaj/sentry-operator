@@ -1,4 +1,5 @@
-﻿using k8s.Models;
+﻿using System.Collections.Generic;
+using k8s.Models;
 using SentryOperator.Docker.Volume;
 using SentryOperator.Entities;
 
@@ -26,6 +27,7 @@ public class SymbolicatorCleanupConverter : CleanupConverter
     {
         var container = base.GetBaseContainer(name, service, sentryDeployment);
         
+        container.SecurityContext ??= new V1SecurityContext();
         container.SecurityContext.RunAsUser = 1001;
         
         return container;
