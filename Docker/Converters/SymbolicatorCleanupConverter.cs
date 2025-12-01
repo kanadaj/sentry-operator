@@ -28,7 +28,7 @@ public class SymbolicatorCleanupConverter : CleanupConverter
         var container = base.GetBaseContainer(name, service, sentryDeployment);
         
         container.SecurityContext ??= new V1SecurityContext();
-        container.SecurityContext.RunAsUser = 1001;
+        container.SecurityContext.RunAsGroup = 1001;
         
         return container;
     }
