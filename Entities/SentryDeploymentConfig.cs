@@ -100,6 +100,7 @@ public class SentryDeploymentConfig
             .Replace("$HEALTHCHECK_FILE_TIMEOUT", HealthCheckFileTimeout)
             .Replace("$HEALTHCHECK_FILE_RETRIES", HealthCheckFileRetries)
             .Replace("$STATSD_ADDR", StatsdAddress)
+            .Replace("${STATSD_ADDR:-}", StatsdAddress)
             .Replace("$SYMBOLICATOR_STATSD_ADDR", StatsdAddress)
             .Replace("$TASKBROKER_STATSD_ADDR", StatsdAddress)
             .Replace("$SNUBA_STATSD_ADDR", StatsdAddress)
