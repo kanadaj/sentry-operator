@@ -1,4 +1,7 @@
-﻿using KubeOps.Abstractions.Entities.Attributes;
+﻿using System.Collections.Generic;
+using System.Text;
+using System.Text.RegularExpressions;
+using KubeOps.Abstractions.Entities.Attributes;
 
 namespace SentryOperator.Entities;
 
@@ -81,29 +84,39 @@ public class SentryDeploymentConfig
 
     public string ReplaceVariables(string yaml, string version)
     {
-        return yaml.Replace("$SENTRY_EVENT_RETENTION_DAYS", EventRetentionDays.ToString())
-            .Replace("$SENTRY_BIND", Bind)
-            .Replace("$SENTRY_IMAGE", Image ?? $"{Registry + (Registry == null || Registry.EndsWith('/') ? "" : "/")}getsentry/sentry:{version}")
-            .Replace("$SNUBA_IMAGE", SnubaImage ?? $"{Registry + (Registry == null || Registry.EndsWith('/') ? "" : "/")}getsentry/snuba:{version}")
-            .Replace("$RELAY_IMAGE", RelayImage ?? $"{Registry + (Registry == null || Registry.EndsWith('/') ? "" : "/")}getsentry/relay:{version}")
-            .Replace("$UPTIME_CHECKER_IMAGE", UptimeImage ?? $"{Registry + (Registry == null || Registry.EndsWith('/') ? "" : "/")}getsentry/uptime-checker:{version}")
-            .Replace("$TASKBROKER_IMAGE", TaskbrokerImage ?? $"{Registry + (Registry == null || Registry.EndsWith('/') ? "" : "/")}getsentry/taskbroker:{version}")
-            .Replace("$SYMBOLICATOR_IMAGE", SymbolicatorImage ?? $"{Registry + (Registry == null || Registry.EndsWith('/') ? "" : "/")}getsentry/symbolicator:{version}")
-            .Replace("$VROOM_IMAGE", VroomImage ?? $"{Registry + (Registry == null || Registry.EndsWith('/') ? "" : "/")}getsentry/vroom:{version}")
-            .Replace("$WAL2JSON_VERSION", Wal2JsonVersion)
-            .Replace("$HEALTHCHECK_START_PERIOD", HealthCheckStartPeriod)
-            .Replace("$HEALTHCHECK_INTERVAL", HealthCheckInterval)
-            .Replace("$HEALTHCHECK_TIMEOUT", HealthCheckTimeout)
-            .Replace("$HEALTHCHECK_RETRIES", HealthCheckRetries)
-            .Replace("$HEALTHCHECK_FILE_START_PERIOD", HealthCheckFileStartPeriod)
-            .Replace("$HEALTHCHECK_FILE_INTERVAL", HealthCheckFileInterval)
-            .Replace("$HEALTHCHECK_FILE_TIMEOUT", HealthCheckFileTimeout)
-            .Replace("$HEALTHCHECK_FILE_RETRIES", HealthCheckFileRetries)
-            .Replace("$STATSD_ADDR", StatsdAddress)
-            .Replace("${STATSD_ADDR:-}", StatsdAddress)
-            .Replace("$SYMBOLICATOR_STATSD_ADDR", StatsdAddress)
-            .Replace("$TASKBROKER_STATSD_ADDR", StatsdAddress)
-            .Replace("$SNUBA_STATSD_ADDR", StatsdAddress)
-            ;
+        var replacements = new Dictionary<string, string>
+        {
+            ["SENTRY_EVENT_RETENTION_DAYS"] = EventRetentionDays.ToString(),
+            ["SENTRY_BIND"] = Bind,
+            ["SENTRY_IMAGE"] = Image ?? $"{Registry + (Registry == null || Registry.EndsWith('/') ? "" : "/")}getsentry/sentry:{version}",
+            ["SNUBA_IMAGE"] = SnubaImage ?? $"{Registry + (Registry == null || Registry.EndsWith('/') ? "" : "/")}getsentry/snuba:{version}",
+            ["RELAY_IMAGE"] = RelayImage ?? $"{Registry + (Registry == null || Registry.EndsWith('/') ? "" : "/")}getsentry/relay:{version}",
+            ["UPTIME_CHECKER_IMAGE"] = UptimeImage ?? $"{Registry + (Registry == null || Registry.EndsWith('/') ? "" : "/")}getsentry/uptime-checker:{version}",
+            ["TASKBROKER_IMAGE"] = TaskbrokerImage ?? $"{Registry + (Registry == null || Registry.EndsWith('/') ? "" : "/")}getsentry/taskbroker:{version}",
+            ["SYMBOLICATOR_IMAGE"] = SymbolicatorImage ?? $"{Registry + (Registry == null || Registry.EndsWith('/') ? "" : "/")}getsentry/symbolicator:{version}",
+            ["VROOM_IMAGE"] = VroomImage ?? $"{Registry + (Registry == null || Registry.EndsWith('/') ? "" : "/")}getsentry/vroom:{version}",
+            ["WAL2JSON_VERSION"] = Wal2JsonVersion,
+            ["HEALTHCHECK_START_PERIOD"] = HealthCheckStartPeriod,
+            ["HEALTHCHECK_INTERVAL"] = HealthCheckInterval,
+            ["HEALTHCHECK_TIMEOUT"] = HealthCheckTimeout,
+            ["HEALTHCHECK_RETRIES"] = HealthCheckRetries,
+            ["HEALTHCHECK_FILE_START_PERIOD"] = HealthCheckFileStartPeriod,
+            ["HEALTHCHECK_FILE_INTERVAL"] = HealthCheckFileInterval,
+            ["HEALTHCHECK_FILE_TIMEOUT"] = HealthCheckFileTimeout,
+            ["HEALTHCHECK_FILE_RETRIES"] = HealthCheckFileRetries,
+            ["STATSD_ADDR"] = StatsdAddress,
+            ["SENTRY_STATSD_ADDR"] = StatsdAddress,
+            ["SYMBOLICATOR_STATSD_ADDR"] = StatsdAddress,
+            ["TASKBROKER_STATSD_ADDR"] = StatsdAddress,
+            ["SNUBA_STATSD_ADDR"] = StatsdAddress,
+        };
+        var result = new StringBuilder(yaml);
+        
+        foreach (var (key, value) in replacements)
+        {
+            result.Replace($"${key}", value);
+        }
+
+        return Regex.Replace(result.ToString(), "\\${(.+?)(?::-(.*?))?}", match => replacements.TryGetValue(match.Groups[1].Value, out var v) ? v : match.Groups[2].Success ? match.Groups[2].Value : match.Groups[1].Value);
     }
 }
