@@ -39,6 +39,9 @@ public class SentryWebConverter : SentryContainerConverter
         int healthcheckRetries = healthcheckRetriesString != null ? int.Parse(healthcheckRetriesString) : 10;
         var healthcheckStartPeriodString = sentryDeployment.Spec.Config?.HealthCheckStartPeriod;
         int healthcheckStartPeriod = healthcheckStartPeriodString != null ? int.Parse(healthcheckStartPeriodString.Trim('s')) : 10;
+        
+        podSpec.Containers[0].Ports ??= new List<V1ContainerPort>();
+        podSpec.Containers[0].Ports.Add(new V1ContainerPort(9000));
 
         podSpec.Containers[0].ReadinessProbe = new V1Probe
         {
