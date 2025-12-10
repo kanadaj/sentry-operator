@@ -26,14 +26,7 @@ public class SentryWebConverter : SentryContainerConverter
 
         podSpec.InitContainers = GetInitContainers(service, sentryDeployment);
         
-        return podSpec;
-    }
-
-    protected override V1Container GetBaseContainer(string name, DockerService service, SentryDeployment sentryDeployment)
-    {
-        var container = base.GetBaseContainer(name, service, sentryDeployment);
-        
-        container.Args = new List<string>
+        podSpec.Containers[0].Args = new List<string>
         {
             "pip install -r /etc/sentry/requirements.txt && exec /docker-entrypoint.sh run web"
         };
@@ -47,10 +40,10 @@ public class SentryWebConverter : SentryContainerConverter
         var healthcheckStartPeriodString = sentryDeployment.Spec.Config?.HealthCheckStartPeriod;
         int healthcheckStartPeriod = healthcheckStartPeriodString != null ? int.Parse(healthcheckStartPeriodString.Trim('s')) : 10;
         
-        container.Ports ??= new List<V1ContainerPort>();
-        container.Ports.Add(new V1ContainerPort(9000));
+        podSpec.Containers[0].Ports ??= new List<V1ContainerPort>();
+        podSpec.Containers[0].Ports.Add(new V1ContainerPort(9000));
 
-        container.ReadinessProbe = new V1Probe
+        podSpec.Containers[0].ReadinessProbe = new V1Probe
         {
             HttpGet = new V1HTTPGetAction
             {
@@ -64,7 +57,7 @@ public class SentryWebConverter : SentryContainerConverter
             SuccessThreshold = 1,
         };
         
-        container.LivenessProbe = new V1Probe
+        podSpec.Containers[0].LivenessProbe = new V1Probe
         {
             HttpGet = new V1HTTPGetAction
             {
@@ -77,8 +70,8 @@ public class SentryWebConverter : SentryContainerConverter
             FailureThreshold = healthcheckRetries,
             SuccessThreshold = 1,
         };
-
-        return container;
+        
+        return podSpec;
     }
 
     private IList<V1Container> GetInitContainers(DockerService service, SentryDeployment sentryDeployment)
