@@ -11,11 +11,20 @@ public class SnubaConsumerConverter : ContainerConverter
     {
         var podSpec = base.GeneratePodSpec(name, service, sentryDeployment);
         
-        var container = podSpec.Containers.First();
+        foreach (var container in podSpec.Containers)
+        {
+            container.EnvFrom ??= new List<V1EnvFromSource>();
+            container.EnvFrom.Add(new V1EnvFromSource
+            {
+                SecretRef = new V1SecretEnvSource("snuba-env")
+            });
+        }
 
-        container.Args ??= new List<string>();
-        container.Args.Add("--concurrency");
-        container.Args.Add("4");
+        var firstContainer = podSpec.Containers.First();
+
+        firstContainer.Args ??= new List<string>();
+        firstContainer.Args.Add("--concurrency");
+        firstContainer.Args.Add("4");
         
         return podSpec;
     }
