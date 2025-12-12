@@ -14,10 +14,7 @@ public class SnubaConsumerConverter : ContainerConverter
         foreach (var container in podSpec.Containers)
         {
             container.EnvFrom ??= new List<V1EnvFromSource>();
-            container.EnvFrom.Add(new V1EnvFromSource
-            {
-                SecretRef = new V1SecretEnvSource("snuba-env")
-            });
+            container.EnvFrom.Add(new V1EnvFromSource(new V1ConfigMapEnvSource("snuba-env")));
         }
 
         var firstContainer = podSpec.Containers.First();
