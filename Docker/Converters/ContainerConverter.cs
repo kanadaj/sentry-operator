@@ -43,7 +43,7 @@ public abstract class ContainerConverter : IDockerContainerConverter
             Array.Empty<string>();
         var commandString = string.Join(" ", commandArray);
         var testCommands = service.Healthcheck?.Test is string testString
-            ? new[] { testString }
+            ? testString.Split(" ")
             : (service.Healthcheck?.Test as IEnumerable<object>)?.Select(x => x.ToString())
             .Where(x => x != "CMD" && x != "CMD-SHELL").ToArray();
 
