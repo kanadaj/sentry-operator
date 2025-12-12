@@ -66,7 +66,7 @@ public abstract class ContainerConverter : IDockerContainerConverter
             Name = name,
             Image = service.Image,
             Command = null,
-            Args = service.Command == null ? null : commandArray,
+            Args = service.Command == null ? null : commandArray.ToList(),
             Env = service.Environment?.Select(x => new V1EnvVar
             {
                 Name = x.Key,
