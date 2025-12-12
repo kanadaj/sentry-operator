@@ -89,7 +89,7 @@ public abstract class ContainerConverter : IDockerContainerConverter
                     {
                         Command = testCommands
                     },
-                    InitialDelaySeconds = 0,
+                    InitialDelaySeconds = int.Parse(service.Healthcheck.StartPeriod?.Trim('s') ?? "0"),
                     PeriodSeconds = int.Parse(service.Healthcheck.Interval?.Trim('s') ?? "0"),
                     TimeoutSeconds = int.Parse(service.Healthcheck.Timeout?.Trim('s') ?? "0"),
                     FailureThreshold = int.Parse(service.Healthcheck.Retries?.ToString() ?? "0"),
