@@ -25,7 +25,8 @@ public class DockerComposeConverter
         "clickhouse",
         "zookeeper",
         "kafka",
-        "nginx"
+        "nginx",
+        "seaweedfs", // We currently do not support this service, and on Kubernetes, Ceph or Minio are far more mature options anyway
     };
 
     private readonly ILogger _logger;
