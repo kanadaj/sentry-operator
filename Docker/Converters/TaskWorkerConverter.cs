@@ -12,6 +12,7 @@ public class TaskWorkerConverter : SentryContainerConverter
     {
         var container = base.GetBaseContainer(name, service, sentryDeployment);
         
+        container.Args ??= new List<string>();
         if(sentryDeployment.Spec.Config?.TaskWorkerConcurrency is > 4)
         {
             var arg = container.Args.FirstOrDefault(x => x.Contains("--concurrency"));
@@ -22,7 +23,6 @@ public class TaskWorkerConverter : SentryContainerConverter
             container.Args.Add($"--concurrency={sentryDeployment.Spec.Config.TaskWorkerConcurrency}");
         }
 
-        container.Args ??= new List<string>();
         if ((sentryDeployment.Spec.Replicas?.TryGetValue("taskbroker", out var brokerCount) ?? false) && brokerCount > 1)
         {
             // We remove the rpc-host option and instead build a rpc-host-list from 0 to N-1 using taskbroker-N.taskbroker:50051
