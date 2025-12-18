@@ -1,4 +1,5 @@
-﻿using k8s.Models;
+﻿using k8s;
+using k8s.Models;
 using SentryOperator.Entities;
 
 namespace SentryOperator.Docker.Converters;
@@ -27,12 +28,70 @@ public class TaskBrokerConverter : ContainerConverter
         {
             if (volume.Name == "sentry-taskbroker")
             {
-                yield return new V1Volume("sentry-taskbroker", emptyDir: new V1EmptyDirVolumeSource());
+                
             }
             else
             {
                 yield return volume;
             }
         }
+    }
+
+    protected override IKubernetesObject<V1ObjectMeta> CreateDeployment(string name, DockerService service, SentryDeployment sentryDeployment)
+    {
+        return new V1StatefulSet
+        {
+            ApiVersion = "apps/v1",
+            Kind = "Deployment",
+            Metadata = new V1ObjectMeta
+            {
+                Name = name,
+                NamespaceProperty = sentryDeployment.Namespace(),
+                Labels = new Dictionary<string, string>
+                {
+                    { "app.kubernetes.io/name", name },
+                    { "app.kubernetes.io/instance", name },
+                    { "app.kubernetes.io/version", sentryDeployment.Spec.GetVersion() },
+                    { "app.kubernetes.io/managed-by", "sentry-operator" },
+                }
+            },
+            Spec = new V1StatefulSetSpec
+            {
+                UpdateStrategy = new V1StatefulSetUpdateStrategy()
+                {
+                    Type = "RollingUpdate",
+                    RollingUpdate = new V1RollingUpdateStatefulSetStrategy()
+                },
+                Selector = new V1LabelSelector
+                {
+                    MatchLabels = new Dictionary<string, string>
+                    {
+                        { "app.kubernetes.io/name", name },
+                        { "app.kubernetes.io/instance", name },
+                    }
+                },
+                VolumeClaimTemplates = new List<V1PersistentVolumeClaim>()
+                {
+                    new V1PersistentVolumeClaim(spec: new V1PersistentVolumeClaimSpec(volumeName: "sentry-taskbroker", resources:new V1VolumeResourceRequirements(requests: new Dictionary<string, ResourceQuantity>()
+                    {
+                        ["storage"] = new ResourceQuantity("5Gi")
+                    })))
+                },
+                Replicas =
+                    (sentryDeployment.Spec.Replicas?.TryGetValue(name, out var replicas) ?? false) ? replicas : 1,
+                Template = new V1PodTemplateSpec
+                {
+                    Metadata = new V1ObjectMeta
+                    {
+                        Labels = new Dictionary<string, string>
+                        {
+                            { "app.kubernetes.io/name", name },
+                            { "app.kubernetes.io/instance", name },
+                        }
+                    },
+                    Spec = GeneratePodSpec(name, service, sentryDeployment)
+                }
+            }
+        };
     }
 }

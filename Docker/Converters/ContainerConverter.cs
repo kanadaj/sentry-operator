@@ -185,7 +185,7 @@ public abstract class ContainerConverter : IDockerContainerConverter
         }
     }
 
-    protected V1Deployment CreateDeployment(string name, DockerService service, SentryDeployment sentryDeployment)
+    protected virtual IKubernetesObject<V1ObjectMeta> CreateDeployment(string name, DockerService service, SentryDeployment sentryDeployment)
     {
         return new V1Deployment
         {

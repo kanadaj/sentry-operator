@@ -22,6 +22,11 @@ public class SnubaConsumerConverter : ContainerConverter
         firstContainer.Args ??= new List<string>();
         firstContainer.Args.Add("--concurrency");
         firstContainer.Args.Add("4");
+
+        if ((sentryDeployment.Spec.Replicas?.TryGetValue("taskbroker", out var brokerCount) ?? false) && brokerCount > 1)
+        {
+            firstContainer.Args.Add("--num-brokers="+ brokerCount);   
+        }
         
         return podSpec;
     }
