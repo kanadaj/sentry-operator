@@ -11,25 +11,26 @@ public class TaskWorkerConverter : SentryContainerConverter
     protected override V1Container GetBaseContainer(string name, DockerService service, SentryDeployment sentryDeployment)
     {
         var container = base.GetBaseContainer(name, service, sentryDeployment);
+
+        var args = container.Args[0].Split(" ").ToList();
         
-        container.Args ??= new List<string>();
         if(sentryDeployment.Spec.Config?.TaskWorkerConcurrency is > 4)
         {
-            var arg = container.Args.FirstOrDefault(x => x.Contains("--concurrency"));
+            var arg = args.FirstOrDefault(x => x.Contains("--concurrency"));
             if (arg != null)
             {
-                container.Args.Remove(arg);
+                args.Remove(arg);
             }
-            container.Args.Add($"--concurrency={sentryDeployment.Spec.Config.TaskWorkerConcurrency}");
+            args.Add($"--concurrency={sentryDeployment.Spec.Config.TaskWorkerConcurrency}");
         }
 
         if ((sentryDeployment.Spec.Replicas?.TryGetValue("taskbroker", out var brokerCount) ?? false) && brokerCount > 1)
         {
             // We remove the rpc-host option and instead build a rpc-host-list from 0 to N-1 using taskbroker-N.taskbroker:50051
-            var arg = container.Args.FirstOrDefault(x => x.Contains("--rpc-host"));
+            var arg = args.FirstOrDefault(x => x.Contains("--rpc-host"));
             if (arg != null)
             {
-                container.Args.Remove(arg);
+                args.Remove(arg);
             }
 
             var option = new StringBuilder("--rpc-host-list=");
@@ -38,8 +39,9 @@ public class TaskWorkerConverter : SentryContainerConverter
                 option.Append("taskbroker-").Append(i).Append(".taskbroker:50051").Append(",");
             }
             option.Remove(option.Length - 1, 1);
-            container.Args.Add(option.ToString());
+            args.Add(option.ToString());
         }
+        container.Args[0] = string.Join(" ", args);
 
         return container;
     }
