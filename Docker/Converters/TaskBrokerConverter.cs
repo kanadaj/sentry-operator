@@ -42,7 +42,7 @@ public class TaskBrokerConverter : ContainerConverter
         return new V1StatefulSet
         {
             ApiVersion = "apps/v1",
-            Kind = "Deployment",
+            Kind = "StatefulSet",
             Metadata = new V1ObjectMeta
             {
                 Name = name,
