@@ -26,11 +26,7 @@ public class TaskBrokerConverter : ContainerConverter
         var vols = base.GetVolumes(service, sentryDeployment);
         foreach(var volume in vols)
         {
-            if (volume.Name == "sentry-taskbroker")
-            {
-                
-            }
-            else
+            if (volume.Name != "sentry-taskbroker")
             {
                 yield return volume;
             }
@@ -75,14 +71,24 @@ public class TaskBrokerConverter : ContainerConverter
                 },
                 VolumeClaimTemplates = new List<V1PersistentVolumeClaim>()
                 {
-                    new V1PersistentVolumeClaim(spec: new V1PersistentVolumeClaimSpec(volumeName: "sentry-taskbroker", accessModes: new List<string>()
-                        {
-                            "ReadWriteOnce"
-                        }, resources:
-                        new V1VolumeResourceRequirements(requests: new Dictionary<string, ResourceQuantity>()
+                    new V1PersistentVolumeClaim()
                     {
-                        ["storage"] = new ResourceQuantity("5Gi")
-                    })))
+                        Metadata = new V1ObjectMeta()
+                        {
+                            Name = "sentry-taskbroker"
+                        },
+                        Spec = new V1PersistentVolumeClaimSpec()
+                        { 
+                            AccessModes= new List<string>()
+                            {
+                                "ReadWriteOnce"
+                            },
+                            Resources= new V1VolumeResourceRequirements(requests: new Dictionary<string, ResourceQuantity>()
+                            {
+                                ["storage"] = new ResourceQuantity("5Gi")
+                            })
+                        }
+                    }
                 },
                 Replicas =
                     (sentryDeployment.Spec.Replicas?.TryGetValue(name, out var replicas) ?? false) ? replicas : 1,
