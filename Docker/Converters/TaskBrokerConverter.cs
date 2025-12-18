@@ -16,6 +16,23 @@ public class TaskBrokerConverter : ContainerConverter
             ContainerPort = 50051,
             Name = "taskbroker"
         });
+        
         return container;
+    }
+
+    protected override IEnumerable<V1Volume> GetVolumes(DockerService service, SentryDeployment sentryDeployment)
+    {
+        var vols = base.GetVolumes(service, sentryDeployment);
+        foreach(var volume in vols)
+        {
+            if (volume.Name == "sentry-taskbroker")
+            {
+                yield return new V1Volume("sentry-taskbroker", emptyDir: new V1EmptyDirVolumeSource());
+            }
+            else
+            {
+                yield return volume;
+            }
+        }
     }
 }
