@@ -59,7 +59,11 @@ public class TaskBrokerConverter : ContainerConverter
             {
                 UpdateStrategy = new V1StatefulSetUpdateStrategy()
                 {
-                    Type = "Recreate",
+                    Type = "RollingUpdate",
+                    RollingUpdate = new V1RollingUpdateStatefulSetStrategy
+                    {
+                        MaxUnavailable = 1
+                    }
                 },
                 Selector = new V1LabelSelector
                 {
