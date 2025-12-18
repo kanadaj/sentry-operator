@@ -59,8 +59,7 @@ public class TaskBrokerConverter : ContainerConverter
             {
                 UpdateStrategy = new V1StatefulSetUpdateStrategy()
                 {
-                    Type = "RollingUpdate",
-                    RollingUpdate = new V1RollingUpdateStatefulSetStrategy()
+                    Type = "Recreate",
                 },
                 Selector = new V1LabelSelector
                 {
@@ -72,7 +71,11 @@ public class TaskBrokerConverter : ContainerConverter
                 },
                 VolumeClaimTemplates = new List<V1PersistentVolumeClaim>()
                 {
-                    new V1PersistentVolumeClaim(spec: new V1PersistentVolumeClaimSpec(volumeName: "sentry-taskbroker", resources:new V1VolumeResourceRequirements(requests: new Dictionary<string, ResourceQuantity>()
+                    new V1PersistentVolumeClaim(spec: new V1PersistentVolumeClaimSpec(volumeName: "sentry-taskbroker", accessModes: new List<string>()
+                        {
+                            "ReadWriteOnce"
+                        }, resources:
+                        new V1VolumeResourceRequirements(requests: new Dictionary<string, ResourceQuantity>()
                     {
                         ["storage"] = new ResourceQuantity("5Gi")
                     })))
