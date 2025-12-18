@@ -82,6 +82,9 @@ public class SentryDeploymentConfig
     [Description("The address to use for statsd")]
     public string StatsdAddress { get; set; } = "statsd:9125";
 
+    [Description("The concurrency for task workers")]
+    public int? TaskWorkerConcurrency { get; set; } = 4;
+
     public string ReplaceVariables(string yaml, string version)
     {
         var replacements = new Dictionary<string, string>
