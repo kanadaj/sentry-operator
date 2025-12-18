@@ -1,4 +1,5 @@
-﻿using k8s.Models;
+﻿using System.Text;
+using k8s.Models;
 using SentryOperator.Entities;
 
 namespace SentryOperator.Docker.Converters;
@@ -25,7 +26,20 @@ public class SnubaConsumerConverter : ContainerConverter
 
         if ((sentryDeployment.Spec.Replicas?.TryGetValue("taskbroker", out var brokerCount) ?? false) && brokerCount > 1)
         {
-            firstContainer.Args.Add("--num-brokers="+ brokerCount);   
+            // We remove the rpc-host option and instead build a rpc-host-list from 0 to N-1 using taskbroker-N.taskbroker:50051
+            var arg = firstContainer.Args.FirstOrDefault(x => x.Contains("--rpc-host"));
+            if (arg != null)
+            {
+                firstContainer.Args.Remove(arg);
+            }
+
+            var option = new StringBuilder("--rpc-host-list=");
+            for (int i = 0; i < brokerCount; i++)
+            {
+                option.Append("taskbroker-").Append(i).Append(".taskbroker:50051").Append(",");
+            }
+            option.Remove(option.Length - 1, 1);
+            firstContainer.Args.Add(option.ToString());
         }
         
         return podSpec;

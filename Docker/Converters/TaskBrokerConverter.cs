@@ -53,6 +53,7 @@ public class TaskBrokerConverter : ContainerConverter
             },
             Spec = new V1StatefulSetSpec
             {
+                ServiceName = "taskbroker",
                 UpdateStrategy = new V1StatefulSetUpdateStrategy()
                 {
                     Type = "RollingUpdate",
