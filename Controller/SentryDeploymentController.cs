@@ -65,11 +65,13 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
 
         var services = resources.OfType<V1Service>().ToList();
         var deployments = resources.OfType<V1Deployment>().ToList();
+        var statefulSets = resources.OfType<V1StatefulSet>().ToList();
 
         var actualServices = await _client.ListAsync<V1Service>(entity.Namespace(), cancellationToken: cancellationToken);
         var actualDeployments = await _client.ListAsync<V1Deployment>(entity.Namespace(), cancellationToken: cancellationToken);
+        var actualStatefulSets = await _client.ListAsync<V1StatefulSet>(entity.Namespace(), cancellationToken: cancellationToken);
 
-        if (!CheckIfUpdateIsNeeded(services, actualServices, deployments, actualDeployments, entity))
+        if (!CheckIfUpdateIsNeeded(services, actualServices, deployments, actualDeployments, statefulSets, actualStatefulSets, entity))
         {
             if (entity.Status.Status != "Ready" || string.IsNullOrWhiteSpace(entity.Status.LastVersion))
             {
@@ -145,16 +147,60 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
             }
         }
 
+        foreach (var statefulSet in statefulSets)
+        {
+            var checksum = statefulSet.GetChecksum();
+            statefulSet.SetLabel("sentry-operator/checksum", checksum);
+            var actualStatefulSet = actualStatefulSets.FirstOrDefault(s => s.Name() == statefulSet.Name());
+            if (actualStatefulSet == null)
+            {
+                statefulSet.AddOwnerReference(entity.MakeOwnerReference());
+                await _client.CreateAsync(statefulSet, CancellationToken.None);
+            }
+            else if (actualStatefulSet.GetLabel("app.kubernetes.io/managed-by") == "sentry-operator")
+            {
+                _logger.LogDebug("Checking statefulset {StatefulSetName} expected checksum: {StatefulSetChecksum}, actual checksum: {ActualChecksum}", statefulSet.Name(), checksum,
+                    actualStatefulSet.GetLabel("sentry-operator/checksum"));
+                if (actualStatefulSet.GetLabel("sentry-operator/checksum") != checksum)
+                {
+                    _logger.LogInformation("Updating statefulset {StatefulSetName}", statefulSet.Name());
+                    statefulSet.Metadata.ResourceVersion = actualStatefulSet.Metadata.ResourceVersion;
+                    statefulSet.AddOwnerReference(entity.MakeOwnerReference());
+                    try
+                    {
+                        await _client.UpdateAsync(statefulSet, CancellationToken.None);
+                    }
+                    catch (Exception e)
+                    {
+                        // We are trying to change something that can't be changed on StatefulSet update, so we need to delete and recreate it
+                        _logger.LogError(e, "Error updating statefulset {StatefulSetName}, deleting and recreating it", statefulSet.Name());
+                        await _client.DeleteAsync(actualStatefulSet, CancellationToken.None);
+                        await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+                        statefulSet.AddOwnerReference(entity.MakeOwnerReference());
+                        await _client.CreateAsync(statefulSet, CancellationToken.None);
+                    }
+                }
+            }
+        }
+
+        foreach (var statefulSet in actualStatefulSets)
+        {
+            if (statefulSets.All(s => s.Name() != statefulSet.Name()) && statefulSet.GetLabel("app.kubernetes.io/managed-by") == "sentry-operator")
+            {
+                await _client.DeleteAsync(statefulSet, CancellationToken.None);
+            }
+        }
+
         if ((entity.Spec.Certificate?.Install ?? true))
         {
             var result = await AddCertManagerConfig(entity);
             if (!result)
             {
                 _logger.LogInformation("Requeuing event");
-                
+
                 entity.Status.Status = "Error creating certificate";
                 await _client.UpdateStatusAsync(entity, CancellationToken.None);
-                
+
                 return;
             }
         }
@@ -168,7 +214,13 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
         return;
     }
 
-    private bool CheckIfUpdateIsNeeded(List<V1Service> services, IList<V1Service> actualServices, List<V1Deployment> deployments, IList<V1Deployment> actualDeployments, SentryDeployment entity)
+    private bool CheckIfUpdateIsNeeded(List<V1Service> services, 
+        IList<V1Service> actualServices, 
+        List<V1Deployment> deployments, 
+        IList<V1Deployment> actualDeployments,
+        List<V1StatefulSet> statefulSets,
+        IList<V1StatefulSet> actualStatefulSets,
+        SentryDeployment entity)
     {
         foreach (var service in services)
         {
@@ -207,10 +259,32 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
                 continue;
             }
 
-            _logger.LogInformation("Deployment {DeploymentName} expected checksum: {DeploymentChecksum}, actual checksum: {ActualChecksum}", deployment.Name(), deployment.GetChecksum(),
+            _logger.LogInformation("Deployment {DeploymentName} expected checksum: {DeploymentChecksum}, actual checksum: {ActualChecksum}", deployment.Name(),
+                deployment.GetChecksum(),
                 matchingDeployment.GetLabel("sentry-operator/checksum"));
 
             if (matchingDeployment.GetLabel("sentry-operator/checksum") != deployment.GetChecksum())
+            {
+                return true;
+            }
+        }
+
+        foreach (var statefulSet in statefulSets)
+        {
+            statefulSet.AddOwnerReference(entity.MakeOwnerReference());
+            
+            var matchingStatefulSet = actualStatefulSets.FirstOrDefault(s => s.Name() == statefulSet.Name());
+            if (matchingStatefulSet == null) return true;
+            
+            if (matchingStatefulSet.GetLabel("app.kubernetes.io/managed-by") != "sentry-operator")
+            {
+                continue;
+            }
+            
+            _logger.LogInformation("StatefulSet {StatefulSetName} expected checksum: {StatefulSetChecksum}, actual checksum: {ActualChecksum}", statefulSet.Name(), statefulSet.GetChecksum(),
+                matchingStatefulSet.GetLabel("sentry-operator/checksum"));
+
+            if (matchingStatefulSet.GetLabel("sentry-operator/checksum") != statefulSet.GetChecksum())
             {
                 return true;
             }
@@ -421,7 +495,7 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
         var configRaw = await _remoteFileService.GetAsync(configUrl);
         var entrypointRaw = await _remoteFileService.GetAsync(entrypointUrl);
         var sentryConfPyRaw = await _remoteFileService.GetAsync(sentryConfPyUrl);
-        
+
         var cachedConfigTemplate = new ConfigTemplate
         {
             Config = configRaw,
@@ -434,7 +508,7 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
         // Allowed characters: "a-z0-9@#%^&*(-_=+)"
         secretKey ??= GenerateSecretKey();
         cachedConfigTemplate.Config = cachedConfigTemplate.Config.Replace("!!changeme!!", secretKey);
-        
+
         // Add mail settings
         var mailConfig = entity.Spec.Config?.Mail;
         if (mailConfig != null)
@@ -445,26 +519,31 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
             mailSettings.AppendLine($"mail.port: {mailConfig.Port}");
             mailSettings.AppendLine($"mail.username: '{mailConfig.Username}'");
             mailSettings.AppendLine($"mail.password: '{mailConfig.Password}'");
-            if(mailConfig.UseTLS)
+            if (mailConfig.UseTLS)
             {
                 mailSettings.AppendLine("mail.use-tls: true");
             }
-            if(mailConfig.UseSSL)
+
+            if (mailConfig.UseSSL)
             {
                 mailSettings.AppendLine("mail.use-ssl: true");
             }
-            if(mailConfig.EnableReplies)
+
+            if (mailConfig.EnableReplies)
             {
                 mailSettings.AppendLine("mail.enable-replies: true");
             }
-            if(!string.IsNullOrWhiteSpace(mailConfig.From))
+
+            if (!string.IsNullOrWhiteSpace(mailConfig.From))
             {
                 mailSettings.AppendLine($"mail.from: '{mailConfig.From}'");
             }
-            if(!string.IsNullOrWhiteSpace(mailConfig.MailgunApiKey))
+
+            if (!string.IsNullOrWhiteSpace(mailConfig.MailgunApiKey))
             {
                 mailSettings.AppendLine($"mail.mailgun-api-key: '{mailConfig.MailgunApiKey}'");
             }
+
             mailConfigRegex.Replace(cachedConfigTemplate.Config, mailSettings.ToString());
         }
 
@@ -485,20 +564,20 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
                                                               }
                                                           }
                                                           """);
-        
+
         // Replace Redis config
-        var redisConfig = entity.Spec.Config?.Redis ?? new []{new RedisConfig()};
+        var redisConfig = entity.Spec.Config?.Redis ?? new[] { new RedisConfig() };
         var redisConfigRegex = new Regex(@"SENTRY_OPTIONS\[""redis.clusters""\] = \{.+?\}\s+^\}", RegexOptions.Singleline | RegexOptions.Multiline);
-        
+
         cachedConfigTemplate.SentryConfPy = redisConfigRegex
             .Replace(cachedConfigTemplate.SentryConfPy, GenerateRedisConfig(redisConfig));
-        
+
         var additionalFlags = entity.Spec.Config?.AdditionalFeatureFlags ?? Array.Empty<string>();
 
         if (additionalFlags.Any())
         {
             const string featuresStart = "for feature in (";
-            
+
             // Prepend the feature flags to the sentry.conf.py file after the start string
             var featuresIndex = cachedConfigTemplate.SentryConfPy.IndexOf(featuresStart, StringComparison.Ordinal);
             if (featuresIndex != -1)
@@ -507,12 +586,11 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
                 var features = string.Join(", ", additionalFlags.Select(f => $"'{f}'"));
                 cachedConfigTemplate.SentryConfPy = cachedConfigTemplate.SentryConfPy.Insert(featuresEnd, $"{features}");
             }
-            
         }
 
         const string internalIPsDefinition = "INTERNAL_SYSTEM_IPS = (get_internal_network(),)";
         const string extendedDefinition = "INTERNAL_SYSTEM_IPS = (get_internal_network(),'172.30.0.0/16','10.0.0.0/8', '192.168.0.0/16')";
-        
+
         cachedConfigTemplate.SentryConfPy = cachedConfigTemplate.SentryConfPy.Replace(internalIPsDefinition, extendedDefinition);
 
         var SSLTLSConfig = """
@@ -522,13 +600,13 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
                            # CSRF_COOKIE_SECURE = True
                            # SOCIAL_AUTH_REDIRECT_IS_HTTPS = True
                            """.Split("\n").Select(s => s.Trim()).Where(s => !string.IsNullOrWhiteSpace(s));
-        
+
         // Replace the above lines without the comments
         foreach (var line in SSLTLSConfig)
         {
             cachedConfigTemplate.SentryConfPy = cachedConfigTemplate.SentryConfPy.Replace(line, line[2..]);
         }
-        
+
         return (cachedConfigTemplate, secretKey);
     }
 
@@ -541,19 +619,19 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
         for (var i = 0; i < redisConfig.Length; i++)
         {
             sb.Append($$"""
-                            {{i}}: {
-                                "host": "{{redisConfig[i].Host ?? "redis"}}",
-                                "port": "{{redisConfig[i].Port ?? "6379"}}",
-                                "password": "{{redisConfig[i].Password ?? ""}}",
-                                "db": "{{redisConfig[i].Database ?? "0"}}"
-                            }
-                            """);
+                        {{i}}: {
+                            "host": "{{redisConfig[i].Host ?? "redis"}}",
+                            "port": "{{redisConfig[i].Port ?? "6379"}}",
+                            "password": "{{redisConfig[i].Password ?? ""}}",
+                            "db": "{{redisConfig[i].Database ?? "0"}}"
+                        }
+                        """);
             if (i < redisConfig.Length - 1)
             {
                 sb.AppendLine(",");
             }
         }
-        
+
         sb.AppendLine("        }");
         sb.AppendLine("    }");
         sb.AppendLine("}");
@@ -731,7 +809,8 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
         cancellationToken.ThrowIfCancellationRequested();
         _logger.LogInformation("Entity {Name} called {DeletedAsyncName}", entity.Name(), nameof(DeletedAsync));
 
-        var deployments = await _client.ListAsync<V1Deployment>(entity.Namespace(), labelSelector: $"app.kubernetes.io/managed-by=sentry-operator", cancellationToken: cancellationToken);
+        var deployments = await _client.ListAsync<V1Deployment>(entity.Namespace(), labelSelector: $"app.kubernetes.io/managed-by=sentry-operator",
+            cancellationToken: cancellationToken);
         foreach (var deployment in deployments)
         {
             await _client.DeleteAsync(deployment, CancellationToken.None);
