@@ -12,9 +12,9 @@ public class TaskWorkerConverter : SentryContainerConverter
     {
         var container = base.GetBaseContainer(name, service, sentryDeployment);
 
-        var args = container.Args[0].Split(" ").ToList();
+        var args = container.Args[0].Replace("$SENTRY_TASKWORKER_CONCURRENCY", "4").Split(" ").ToList();
         
-        if(sentryDeployment.Spec.Config?.TaskWorkerConcurrency is > 4)
+        if(sentryDeployment.Spec.Config?.TaskWorkerConcurrency is not null && sentryDeployment.Spec.Config.TaskWorkerConcurrency != 4)
         {
             var arg = args.FirstOrDefault(x => x.Contains("--concurrency"));
             if (arg != null)
