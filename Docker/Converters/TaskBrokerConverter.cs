@@ -125,7 +125,7 @@ public class TaskBrokerConverter : ContainerConverter
         podSpec.Containers[0].VolumeMounts ??= new List<V1VolumeMount>();
         podSpec.Containers[0].VolumeMounts.Add(new V1VolumeMount{
             Name = "config",
-            MountPath = "/etc/sentry-taskbroker",
+            MountPath = "/etc/taskbroker",
         });
 
         return podSpec;
