@@ -31,6 +31,15 @@ public class TaskBrokerConverter : ContainerConverter
                 yield return volume;
             }
         }
+
+        yield return new V1Volume
+        {
+            Name = "config",
+            ConfigMap = new V1ConfigMapVolumeSource
+            {
+                Name = "taskbroker-conf"
+            }
+        };
     }
 
     protected override IKubernetesObject<V1ObjectMeta> CreateDeployment(string name, DockerService service, SentryDeployment sentryDeployment)
@@ -107,5 +116,18 @@ public class TaskBrokerConverter : ContainerConverter
                 }
             }
         };
+    }
+
+    protected override V1PodSpec GeneratePodSpec(string name, DockerService service, SentryDeployment sentryDeployment)
+    {
+        var podSpec = base.GeneratePodSpec(name, service, sentryDeployment);
+        
+        podSpec.Containers[0].VolumeMounts ??= new List<V1VolumeMount>();
+        podSpec.Containers[0].VolumeMounts.Add(new V1VolumeMount{
+            Name = "config",
+            MountPath = "/etc/sentry-taskbroker",
+        });
+
+        return podSpec;
     }
 }

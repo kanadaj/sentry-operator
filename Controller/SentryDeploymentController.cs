@@ -482,6 +482,26 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
             };
             await _client.CreateAsync(snubaEnvConfigMap);
         }
+        
+        var snubaHealthCheckConfigMap = await _client.GetAsync<V1ConfigMap>("snuba-healthcheck", entity.Namespace());
+        if (snubaHealthCheckConfigMap == null)
+        {
+            var snubaApiHealthCheckUrl = $"https://raw.githubusercontent.com/getsentry/self-hosted/{entity.Spec.GetVersion()}/snuba/api_healthcheck.py";
+            var snubaApiHealthCheckRaw = await _remoteFileService.GetAsync(snubaApiHealthCheckUrl);
+            snubaHealthCheckConfigMap = new V1ConfigMap
+            {
+                Metadata = new V1ObjectMeta
+                {
+                    Name = "snuba-healthcheck",
+                    NamespaceProperty = entity.Namespace()
+                },
+                Data = new Dictionary<string, string>
+                {
+                    ["api_healthcheck.py"] = snubaApiHealthCheckRaw
+                }
+            };
+            await _client.CreateAsync(snubaHealthCheckConfigMap);
+        }
 
         await InitAndGetRelayConfigMap(entity);
     }
