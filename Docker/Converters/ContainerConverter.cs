@@ -141,7 +141,7 @@ public abstract class ContainerConverter : IDockerContainerConverter
         return GetVolumeData(service, sentryDeployment).Select(x => x is SecretVolumeRef secretRef 
             ? new V1Volume(x.Name, secret: new V1SecretVolumeSource(420, secretName: secretRef.SecretName))
             : x is ConfigMapVolumeRef configMapRef
-            ? new V1Volume(x.Name, configMap: new V1ConfigMapVolumeSource(name: configMapRef.ConfigMapName ?? x.Name))
+            ? new V1Volume(x.Name, configMap: new V1ConfigMapVolumeSource(name: configMapRef.ConfigMapName ?? x.Name, items: configMapRef.Items))
             : new V1Volume(x.Name, persistentVolumeClaim: new V1PersistentVolumeClaimVolumeSource(x.Name)));
     }
 
@@ -158,6 +158,13 @@ public abstract class ContainerConverter : IDockerContainerConverter
             // Skip the config volume, we mount ConfigMaps and Secrets instead
             if (volumeName == "sentry")
             {
+                continue;
+            }
+
+            if (volumeName.Contains("snuba/api_healthcheck.py"))
+            {
+                // We replace this with a ConfigMap ref
+                yield return new ConfigMapVolumeRef("snuba-healthcheck", volumePath, "api_healthcheck.py");
                 continue;
             }
 
