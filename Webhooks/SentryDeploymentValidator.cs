@@ -1,6 +1,5 @@
 ﻿using System.Text.RegularExpressions;
 using KubeOps.Operator.Web.Webhooks.Admission.Validation;
-using SentryOperator.Controller;
 using SentryOperator.Docker;
 using SentryOperator.Entities;
 using SentryOperator.Services;
@@ -11,12 +10,12 @@ namespace SentryOperator.Webhooks;
 [ValidationWebhook(typeof(SentryDeployment))]
 public class SentryDeploymentValidator : ValidationWebhook<SentryDeployment>
 {
-    private readonly RemoteFileService _remoteFileService;
+    private readonly IComposeSourceResolver _composeSourceResolver;
     private readonly DockerComposeConverter _dockerComposeConverter;
 
-    public SentryDeploymentValidator(RemoteFileService remoteFileService, DockerComposeConverter dockerComposeConverter)
+    public SentryDeploymentValidator(IComposeSourceResolver composeSourceResolver, DockerComposeConverter dockerComposeConverter)
     {
-        _remoteFileService = remoteFileService;
+        _composeSourceResolver = composeSourceResolver;
         _dockerComposeConverter = dockerComposeConverter;
     }
 
@@ -50,17 +49,10 @@ public class SentryDeploymentValidator : ValidationWebhook<SentryDeployment>
             try
             {
                 
-                var dockerComposeUrl = SentryDeploymentController.DockerComposeUrl;
-                if (newEntity.Spec.DockerComposeUrl != null)
-                {
-                    dockerComposeUrl = newEntity.Spec.DockerComposeUrl;
-                }
-                else if (newEntity.Spec.Version != null)
-                {
-                    dockerComposeUrl = $"https://raw.githubusercontent.com/getsentry/self-hosted/{(newEntity.Spec.Version == "nightly" ? "master" : newEntity.Spec.Version)}/docker-compose.yml";
-                }
-
-                var dockerComposeRaw = _remoteFileService.Get(dockerComposeUrl);
+                var dockerComposeRaw = _composeSourceResolver
+                    .GetComposeAsync(newEntity)
+                    .GetAwaiter()
+                    .GetResult();
 
                 _dockerComposeConverter.Parse(dockerComposeRaw, newEntity.Spec.DockerComposeOverrides);
             }

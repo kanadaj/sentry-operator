@@ -1,5 +1,6 @@
 ﻿using k8s;
 using k8s.Models;
+using SentryOperator.Docker.Compose;
 using SentryOperator.Docker.Volume;
 using SentryOperator.Entities;
 
@@ -64,7 +65,9 @@ public abstract class ContainerConverter : IDockerContainerConverter
             service.Healthcheck.Retries ??= sentryDeployment.Spec.Config?.HealthCheckRetries;
             service.Healthcheck.StartPeriod ??= sentryDeployment.Spec.Config?.HealthCheckStartPeriod;
             totalRetries = int.Parse(service.Healthcheck.Retries);
-            if(int.TryParse(service.Healthcheck.StartPeriod?.Trim('s'), out var startPeriod) && int.TryParse(service.Healthcheck.Interval?.Trim('s'), out var interval))
+            var startPeriod = ParseDurationSeconds(service.Healthcheck.StartPeriod);
+            var interval = ParseDurationSeconds(service.Healthcheck.Interval);
+            if (interval > 0)
             {
                 totalRetries += startPeriod / interval;
             }
@@ -98,9 +101,9 @@ public abstract class ContainerConverter : IDockerContainerConverter
                     {
                         Command = testCommands
                     },
-                    InitialDelaySeconds = int.Parse(service.Healthcheck.StartPeriod?.Trim('s') ?? "0"),
-                    PeriodSeconds = int.Parse(service.Healthcheck.Interval?.Trim('s') ?? "0"),
-                    TimeoutSeconds = int.Parse(service.Healthcheck.Timeout?.Trim('s') ?? "0"),
+                    InitialDelaySeconds = ParseDurationSeconds(service.Healthcheck.StartPeriod),
+                    PeriodSeconds = ParseDurationSeconds(service.Healthcheck.Interval),
+                    TimeoutSeconds = ParseDurationSeconds(service.Healthcheck.Timeout),
                     FailureThreshold = int.Parse(service.Healthcheck.Retries?.ToString() ?? "0"),
                 }
                 : null,
@@ -133,6 +136,31 @@ public abstract class ContainerConverter : IDockerContainerConverter
         }
 
         return container;
+    }
+
+    private static int ParseDurationSeconds(string? duration)
+    {
+        if (string.IsNullOrWhiteSpace(duration))
+        {
+            return 0;
+        }
+
+        var suffix = duration[^1];
+        var value = suffix is 's' or 'm' or 'h'
+            ? duration[..^1]
+            : duration;
+
+        if (!int.TryParse(value, out var parsedValue))
+        {
+            throw new FormatException($"Unsupported health check duration '{duration}'.");
+        }
+
+        return suffix switch
+        {
+            'm' => parsedValue * 60,
+            'h' => parsedValue * 60 * 60,
+            _ => parsedValue,
+        };
     }
 
     protected virtual IEnumerable<V1VolumeMount> GetVolumeMounts(DockerService service, SentryDeployment sentryDeployment)

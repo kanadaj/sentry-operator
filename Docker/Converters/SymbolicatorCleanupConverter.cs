@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using k8s.Models;
+using SentryOperator.Docker.Compose;
 using SentryOperator.Docker.Volume;
 using SentryOperator.Entities;
 

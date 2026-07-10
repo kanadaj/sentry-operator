@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using SentryOperator.Docker;
+using SentryOperator.Docker.Compose;
 using Xunit.Abstractions;
 
 namespace SentryOperator.Tests;

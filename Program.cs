@@ -17,7 +17,14 @@ builder.Services.AddLogging(logging =>
         .CreateLogger());
 });
 builder.Services.AddTransient<DockerComposeConverter>();
+builder.Services.AddTransient<IDockerComposeParser, YamlDockerComposeParser>();
+builder.Services.AddTransient<IContainerConverterResolver, ContainerConverterResolver>();
+builder.Services.AddSingleton<IManagedServicePolicy, SentryManagedServicePolicy>();
 builder.Services.AddHttpClient<RemoteFileService>();
+builder.Services.AddTransient<IComposeSourceResolver, ComposeSourceResolver>();
+builder.Services.AddTransient<ICertificateProvisioner, CertificateProvisioner>();
+builder.Services.AddTransient<IDefaultConfigProvisioner, DefaultConfigProvisioner>();
+builder.Services.AddTransient<IManagedResourceCleanup, ManagedResourceCleanup>();
 
 // Find all non-abstract IDockerContainerConverter implementations and register them.
 foreach (var converter in typeof(Program).Assembly.GetTypes()
