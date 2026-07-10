@@ -6,6 +6,7 @@ namespace SentryOperator.Docker.Converters;
 
 public class TaskWorkerConverter : SentryContainerConverter
 {
+    public override int Priority => 1;
     public override bool CanConvert(string name, DockerService service) => name == "taskworker";
 
     protected override V1Container GetBaseContainer(string name, DockerService service, SentryDeployment sentryDeployment)
@@ -14,7 +15,7 @@ public class TaskWorkerConverter : SentryContainerConverter
 
         var args = container.Args[0].Replace("$SENTRY_TASKWORKER_CONCURRENCY", "4").Split(" ").ToList();
         
-        if(sentryDeployment.Spec.Config?.TaskWorkerConcurrency is not null && sentryDeployment.Spec.Config.TaskWorkerConcurrency != 4)
+        if(sentryDeployment.Spec.Config?.TaskWorkerConcurrency is not null and not 4)
         {
             var arg = args.FirstOrDefault(x => x.Contains("--concurrency"));
             if (arg != null)
