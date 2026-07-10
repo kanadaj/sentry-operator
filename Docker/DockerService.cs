@@ -1,7 +1,10 @@
 ﻿using System.Collections;
 using System.Reflection;
+using System.Runtime.Serialization;
 using SentryOperator.Extensions;
+using YamlDotNet.Core;
 using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.NodeDeserializers;
 
 namespace SentryOperator.Docker;
 
@@ -20,7 +23,7 @@ public class DockerService
     public string? Restart { get; set; }
     
     [YamlMember(Alias = "depends_on")]
-    public object? DependsOn { get; set; }
+    public Dictionary<string, DependsOn>? DependsOn { get; set; }
     
     [YamlMember(Alias = "command")]
     public object? Command { get; set; }
@@ -56,7 +59,22 @@ public class DockerService
 public class DependsOn
 {
     [YamlMember(Alias = "condition")]
-    public string? Condition { get; set; }
+    public ServiceCondition Condition { get; set; }
+    
+    [YamlMember(Alias = "restart")]
+    public bool? Restart { get; set; }
+}
+
+public enum ServiceCondition
+{
+    [EnumMember(Value = "service_started")]
+    ServiceStarted,
+
+    [EnumMember(Value = "service_healthy")]
+    ServiceHealthy,
+
+    [EnumMember(Value = "service_completed_successfully")]
+    ServiceCompletedSuccessfully
 }
 
 public class Build
