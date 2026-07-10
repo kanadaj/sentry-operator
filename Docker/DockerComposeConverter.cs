@@ -16,8 +16,8 @@ public class DockerComposeConverter
     /// These services should be managed by the user and not by the operator because they require external resources and tuning.
     /// An external operator may be used for ease of use. For this reason, this operator will not manage these services.
     /// </summary>
-    private readonly string[] _ignoredServices = new[]
-    {
+    public static readonly string[] IgnoredServices =
+    [
         "smtp",
         //"memcached",
         "redis",
@@ -27,7 +27,7 @@ public class DockerComposeConverter
         "kafka",
         "nginx",
         "seaweedfs", // We currently do not support this service, and on Kubernetes, Ceph or Minio are far more mature options anyway
-    };
+    ];
 
     private readonly ILogger _logger;
 
@@ -39,12 +39,18 @@ public class DockerComposeConverter
 
     public List<IKubernetesObject<V1ObjectMeta>> Convert(string dockerComposeYaml, SentryDeployment sentryDeployment)
     {
+        var result = ConvertWithOrchestrator(dockerComposeYaml, sentryDeployment);
+        return result.Resources;
+    }
+
+    public DockerComposeConversionResult ConvertWithOrchestrator(string dockerComposeYaml, SentryDeployment sentryDeployment)
+    {
         var dockerCompose = Parse(dockerComposeYaml, sentryDeployment.Spec.DockerComposeOverrides);
         
         var result = new List<IKubernetesObject<V1ObjectMeta>>();
         foreach (var service in dockerCompose.Services!)
         {
-            if (_ignoredServices.Contains(service.Key))
+            if (IgnoredServices.Contains(service.Key))
             {
                 _logger.LogInformation("Ignoring service {ServiceName}", service.Key);
                 continue;
@@ -62,7 +68,16 @@ public class DockerComposeConverter
             result.AddRange(resources);
         }
 
-        return result;
+        var orchestrator = new DeploymentOrchestrator(_logger, dockerCompose);
+        orchestrator.MapResourcesToServices(result);
+        orchestrator.CalculateDeploymentOrder();
+
+        return new DockerComposeConversionResult
+        {
+            Resources = result,
+            DockerCompose = dockerCompose,
+            Orchestrator = orchestrator
+        };
     }
 
     public DockerCompose Parse(string dockerComposeYaml, string? overrides)

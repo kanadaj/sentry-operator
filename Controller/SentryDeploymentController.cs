@@ -52,7 +52,9 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
         _logger.LogInformation("Entity {Name} called {ReconcileAsyncName}", entity.Name(), nameof(ReconcileAsync));
         await _finalizer(entity, cancellationToken);
 
-        var resources = await FetchAndConvertDockerCompose(entity);
+        var conversionResult = await FetchAndConvertDockerComposeWithOrchestrator(entity);
+        var resources = conversionResult.Resources;
+        var orchestrator = conversionResult.Orchestrator;
 
         await AddDefaultConfig(entity);
 
@@ -89,6 +91,7 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
         entity.Status.Message = "Updating Sentry deployment";
         await _client.UpdateStatusAsync(entity, CancellationToken.None);
 
+        // Deploy services first (they have no dependencies and may be needed by deployments/statefulsets)
         foreach (var service in services)
         {
             var checksum = service.GetChecksum();
@@ -110,77 +113,16 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
             }
         }
 
-
-        foreach (var deployment in deployments)
-        {
-            var checksum = deployment.GetChecksum();
-            deployment.SetLabel("sentry-operator/checksum", checksum);
-            var actualDeployment = actualDeployments.FirstOrDefault(d => d.Name() == deployment.Name());
-            if (actualDeployment == null)
-            {
-                deployment.AddOwnerReference(entity.MakeOwnerReference());
-                await _client.CreateAsync(deployment, CancellationToken.None);
-            }
-            else if (actualDeployment.GetLabel("app.kubernetes.io/managed-by") == "sentry-operator")
-            {
-                _logger.LogDebug("Checking deployment {DeploymentName} expected checksum: {DeploymentChecksum}, actual checksum: {ActualChecksum}", deployment.Name(), checksum,
-                    actualDeployment.GetLabel("sentry-operator/checksum"));
-                if (actualDeployment.GetLabel("sentry-operator/checksum") != checksum || entity.Spec.Version == "nightly")
-                {
-                    _logger.LogInformation("Updating deployment {DeploymentName}", deployment.Name());
-                    deployment.Metadata.ResourceVersion = actualDeployment.Metadata.ResourceVersion;
-                    deployment.AddOwnerReference(entity.MakeOwnerReference());
-                    await _client.UpdateAsync(deployment, CancellationToken.None);
-
-                    // if (deployment.Metadata.Name == "snuba-api")
-                    // {
-                    //     await InstallKafkaTopics(entity);
-                    // }
-                }
-            }
-        }
+        // Deploy deployments and statefulsets in dependency order with health checks
+        await DeployWorkloadResourcesInOrder(
+            deployments, statefulSets, actualDeployments, actualStatefulSets, 
+            orchestrator, entity, cancellationToken);
 
         foreach (var deployment in actualDeployments)
         {
             if (deployments.All(d => d.Name() != deployment.Name()) && deployment.GetLabel("app.kubernetes.io/managed-by") == "sentry-operator")
             {
                 await _client.DeleteAsync(deployment, CancellationToken.None);
-            }
-        }
-
-        foreach (var statefulSet in statefulSets)
-        {
-            var checksum = statefulSet.GetChecksum();
-            statefulSet.SetLabel("sentry-operator/checksum", checksum);
-            var actualStatefulSet = actualStatefulSets.FirstOrDefault(s => s.Name() == statefulSet.Name());
-            if (actualStatefulSet == null)
-            {
-                statefulSet.AddOwnerReference(entity.MakeOwnerReference());
-                await _client.CreateAsync(statefulSet, CancellationToken.None);
-            }
-            else if (actualStatefulSet.GetLabel("app.kubernetes.io/managed-by") == "sentry-operator")
-            {
-                _logger.LogDebug("Checking statefulset {StatefulSetName} expected checksum: {StatefulSetChecksum}, actual checksum: {ActualChecksum}", statefulSet.Name(), checksum,
-                    actualStatefulSet.GetLabel("sentry-operator/checksum"));
-                if (actualStatefulSet.GetLabel("sentry-operator/checksum") != checksum)
-                {
-                    _logger.LogInformation("Updating statefulset {StatefulSetName}", statefulSet.Name());
-                    statefulSet.Metadata.ResourceVersion = actualStatefulSet.Metadata.ResourceVersion;
-                    statefulSet.AddOwnerReference(entity.MakeOwnerReference());
-                    try
-                    {
-                        await _client.UpdateAsync(statefulSet, CancellationToken.None);
-                    }
-                    catch (Exception e)
-                    {
-                        // We are trying to change something that can't be changed on StatefulSet update, so we need to delete and recreate it
-                        _logger.LogError(e, "Error updating statefulset {StatefulSetName}, deleting and recreating it", statefulSet.Name());
-                        await _client.DeleteAsync(actualStatefulSet, CancellationToken.None);
-                        await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
-                        statefulSet.AddOwnerReference(entity.MakeOwnerReference());
-                        await _client.CreateAsync(statefulSet, CancellationToken.None);
-                    }
-                }
             }
         }
 
@@ -213,6 +155,133 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
         await _client.UpdateStatusAsync(entity, CancellationToken.None);
         //return ResourceControllerResult.RequeueEvent(TimeSpan.FromSeconds(15));
         return;
+    }
+
+    private async Task DeployWorkloadResourcesInOrder(
+        List<V1Deployment> deployments,
+        List<V1StatefulSet> statefulSets,
+        IList<V1Deployment> actualDeployments,
+        IList<V1StatefulSet> actualStatefulSets,
+        DeploymentOrchestrator orchestrator,
+        SentryDeployment entity,
+        CancellationToken cancellationToken)
+    {
+        var allWorkloads = new Dictionary<string, object>();
+        foreach (var d in deployments)
+            allWorkloads[d.Name()] = d;
+        foreach (var s in statefulSets)
+            allWorkloads[s.Name()] = s;
+
+        var deploymentOrder = orchestrator.CalculateDeploymentOrder();
+        var deployed = new HashSet<string>();
+
+        foreach (var serviceName in deploymentOrder)
+        {
+            if (!allWorkloads.ContainsKey(serviceName))
+                continue;
+
+            var workload = allWorkloads[serviceName];
+
+            // Wait for dependencies to be ready before deploying
+            while (!orchestrator.AreDependenciesSatisfied(serviceName, actualDeployments, actualStatefulSets))
+            {
+                _logger.LogInformation("Waiting for dependencies of {ServiceName} to be ready", serviceName);
+                await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+                
+                // Refresh deployment status
+                actualDeployments = await _client.ListAsync<V1Deployment>(entity.Namespace(), cancellationToken: cancellationToken);
+                actualStatefulSets = await _client.ListAsync<V1StatefulSet>(entity.Namespace(), cancellationToken: cancellationToken);
+            }
+
+            _logger.LogInformation("Deploying {ServiceName} with dependencies satisfied", serviceName);
+
+            if (workload is V1Deployment deployment)
+            {
+                await DeployWorkload(deployment, actualDeployments, entity, cancellationToken);
+                deployed.Add(serviceName);
+                actualDeployments = await _client.ListAsync<V1Deployment>(entity.Namespace(), cancellationToken: cancellationToken);
+            }
+            else if (workload is V1StatefulSet statefulSet)
+            {
+                await DeployStatefulSet(statefulSet, actualStatefulSets, entity, cancellationToken);
+                deployed.Add(serviceName);
+                actualStatefulSets = await _client.ListAsync<V1StatefulSet>(entity.Namespace(), cancellationToken: cancellationToken);
+            }
+        }
+    }
+
+    private async Task DeployWorkload(
+        V1Deployment deployment,
+        IList<V1Deployment> actualDeployments,
+        SentryDeployment entity,
+        CancellationToken cancellationToken)
+    {
+        var checksum = deployment.GetChecksum();
+        deployment.SetLabel("sentry-operator/checksum", checksum);
+        var actualDeployment = actualDeployments.FirstOrDefault(d => d.Name() == deployment.Name());
+
+        if (actualDeployment == null)
+        {
+            deployment.AddOwnerReference(entity.MakeOwnerReference());
+            await _client.CreateAsync(deployment, CancellationToken.None);
+            _logger.LogInformation("Created deployment {DeploymentName}", deployment.Name());
+        }
+        else if (actualDeployment.GetLabel("app.kubernetes.io/managed-by") == "sentry-operator")
+        {
+            _logger.LogDebug("Checking deployment {DeploymentName} expected checksum: {DeploymentChecksum}, actual checksum: {ActualChecksum}",
+                deployment.Name(), checksum, actualDeployment.GetLabel("sentry-operator/checksum"));
+
+            if (actualDeployment.GetLabel("sentry-operator/checksum") != checksum || entity.Spec.Version == "nightly")
+            {
+                _logger.LogInformation("Updating deployment {DeploymentName}", deployment.Name());
+                deployment.Metadata.ResourceVersion = actualDeployment.Metadata.ResourceVersion;
+                deployment.AddOwnerReference(entity.MakeOwnerReference());
+                await _client.UpdateAsync(deployment, CancellationToken.None);
+            }
+        }
+    }
+
+    private async Task DeployStatefulSet(
+        V1StatefulSet statefulSet,
+        IList<V1StatefulSet> actualStatefulSets,
+        SentryDeployment entity,
+        CancellationToken cancellationToken)
+    {
+        var checksum = statefulSet.GetChecksum();
+        statefulSet.SetLabel("sentry-operator/checksum", checksum);
+        var actualStatefulSet = actualStatefulSets.FirstOrDefault(s => s.Name() == statefulSet.Name());
+
+        if (actualStatefulSet == null)
+        {
+            statefulSet.AddOwnerReference(entity.MakeOwnerReference());
+            await _client.CreateAsync(statefulSet, CancellationToken.None);
+            _logger.LogInformation("Created statefulset {StatefulSetName}", statefulSet.Name());
+        }
+        else if (actualStatefulSet.GetLabel("app.kubernetes.io/managed-by") == "sentry-operator")
+        {
+            _logger.LogDebug("Checking statefulset {StatefulSetName} expected checksum: {StatefulSetChecksum}, actual checksum: {ActualChecksum}",
+                statefulSet.Name(), checksum, actualStatefulSet.GetLabel("sentry-operator/checksum"));
+
+            if (actualStatefulSet.GetLabel("sentry-operator/checksum") != checksum)
+            {
+                _logger.LogInformation("Updating statefulset {StatefulSetName}", statefulSet.Name());
+                statefulSet.Metadata.ResourceVersion = actualStatefulSet.Metadata.ResourceVersion;
+                statefulSet.AddOwnerReference(entity.MakeOwnerReference());
+                try
+                {
+                    await _client.UpdateAsync(statefulSet, CancellationToken.None);
+                }
+                catch (Exception e)
+                {
+                    // We are trying to change something that can't be changed on StatefulSet update, so we need to delete and recreate it
+                    _logger.LogError(e, "Error updating statefulset {StatefulSetName}, deleting and recreating it", statefulSet.Name());
+                    await _client.DeleteAsync(actualStatefulSet, CancellationToken.None);
+                    await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+                    statefulSet.AddOwnerReference(entity.MakeOwnerReference());
+                    await _client.CreateAsync(statefulSet, CancellationToken.None);
+                }
+            }
+        }
     }
 
     private bool CheckIfUpdateIsNeeded(List<V1Service> services, 
@@ -861,6 +930,24 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
         {
             await _client.DeleteAsync(certificate, CancellationToken.None);
         }
+    }
+
+    private async Task<DockerComposeConversionResult> FetchAndConvertDockerComposeWithOrchestrator(SentryDeployment entity)
+    {
+        var dockerComposeUrl = DockerComposeUrl;
+        if (entity.Spec.DockerComposeUrl != null)
+        {
+            dockerComposeUrl = entity.Spec.DockerComposeUrl;
+        }
+        else if (entity.Spec.Version != null)
+        {
+            dockerComposeUrl = $"https://raw.githubusercontent.com/getsentry/self-hosted/{(entity.Spec.Version == "nightly" ? "master" : entity.Spec.Version)}/docker-compose.yml";
+        }
+
+        var dockerComposeRaw = await _remoteFileService.GetAsync(dockerComposeUrl);
+
+        dockerComposeRaw = (entity.Spec.Config ?? new()).ReplaceVariables(dockerComposeRaw, entity.Spec.Version ?? "nightly");
+        return _dockerComposeConverter.ConvertWithOrchestrator(dockerComposeRaw, entity);
     }
 
     private async Task<List<IKubernetesObject<V1ObjectMeta>>> FetchAndConvertDockerCompose(SentryDeployment entity)

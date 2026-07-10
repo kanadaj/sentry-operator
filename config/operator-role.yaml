@@ -37,6 +37,7 @@ rules:
   - apps
   resources:
   - deployments
+  - statefulsets
   verbs:
   - get
   - list
@@ -85,6 +86,14 @@ rules:
   - apps
   resources:
   - deployments/status
+  verbs:
+  - get
+  - update
+  - patch
+- apiGroups:
+  - apps
+  resources:
+  - statefulsets/status
   verbs:
   - get
   - update

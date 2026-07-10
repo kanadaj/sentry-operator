@@ -191,6 +191,11 @@ spec:
                   statsdAddress:
                     description: The address to use for statsd
                     type: string
+                  taskWorkerConcurrency:
+                    description: The concurrency for task workers
+                    format: int32
+                    nullable: true
+                    type: integer
                 type: object
               replicas:
                 additionalProperties:
