@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="SentryOperator.csproj" />
+  <Project Path="SentryOperator.Tests/SentryOperator.Tests.csproj" />
+</Solution>

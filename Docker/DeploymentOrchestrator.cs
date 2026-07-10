@@ -70,6 +70,21 @@ public class DeploymentOrchestrator
     }
 
     /// <summary>
+    /// Returns each service and its direct dependencies in deployment order.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyDictionary<string, ServiceCondition>> GetDependencyMap()
+    {
+        if (_deploymentOrder.Count == 0)
+        {
+            CalculateDeploymentOrder();
+        }
+
+        return _deploymentOrder.ToDictionary(
+            serviceName => serviceName,
+            serviceName => (IReadOnlyDictionary<string, ServiceCondition>)GetDependencies(serviceName));
+    }
+
+    /// <summary>
     /// Depth-first search for topological sorting with cycle detection.
     /// </summary>
     private bool TopologicalSort(string serviceName, HashSet<string> visited, HashSet<string> visiting, List<string> result)
@@ -199,6 +214,14 @@ public class DeploymentOrchestrator
         var dependencies = GetDependencies(serviceName);
         foreach (var (depName, condition) in dependencies)
         {
+            if (DockerComposeConverter.IgnoredServices.Contains(depName))
+            {
+                _logger.LogDebug(
+                    "Ignoring readiness status for externally managed dependency {DependencyName} of {ServiceName}",
+                    depName, serviceName);
+                continue;
+            }
+
             var depDeployment = actualDeployments.FirstOrDefault(d => d.Name() == depName);
             var depStatefulSet = actualStatefulSets.FirstOrDefault(s => s.Name() == depName);
 

@@ -26,6 +26,10 @@
     <Content Include=".github\workflows\docker-publish.yml" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="SentryOperator.Tests\**\*.cs" />
+  </ItemGroup>
+
 
 
 
