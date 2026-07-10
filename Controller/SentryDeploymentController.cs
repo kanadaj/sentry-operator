@@ -21,6 +21,7 @@ namespace SentryOperator.Controller;
 [EntityRbac(typeof(V1Deployment), Verbs = RbacVerb.Create | RbacVerb.Delete | RbacVerb.Patch | RbacVerb.Update | RbacVerb.Get | RbacVerb.List)]
 [EntityRbac(typeof(V1StatefulSet), Verbs = RbacVerb.Create | RbacVerb.Delete | RbacVerb.Patch | RbacVerb.Update | RbacVerb.Get | RbacVerb.List)]
 [EntityRbac(typeof(V1Service), Verbs = RbacVerb.Create | RbacVerb.Delete | RbacVerb.Patch | RbacVerb.Update | RbacVerb.Get | RbacVerb.List)]
+[EntityRbac(typeof(V2HorizontalPodAutoscaler), Verbs = RbacVerb.Create | RbacVerb.Delete | RbacVerb.Patch | RbacVerb.Update | RbacVerb.Get | RbacVerb.List)]
 [EntityRbac(typeof(V1Secret), Verbs = RbacVerb.Create | RbacVerb.Delete | RbacVerb.Patch | RbacVerb.Update | RbacVerb.Get | RbacVerb.List)]
 [EntityRbac(typeof(V1ConfigMap), Verbs = RbacVerb.Create | RbacVerb.Delete | RbacVerb.Patch | RbacVerb.Update | RbacVerb.Get | RbacVerb.List)]
 [GenericRbac(Resources = new[] { "certificates" }, Groups = new[] { "cert-manager.io" }, Verbs = RbacVerb.Get | RbacVerb.Delete | RbacVerb.Patch | RbacVerb.Create)]
@@ -35,10 +36,12 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
     private readonly IComposeSourceResolver _composeSourceResolver;
     private readonly IKubernetesClient _client;
     private readonly DockerComposeConverter _dockerComposeConverter;
+    private readonly IHorizontalPodAutoscalerReconciler _horizontalPodAutoscalerReconciler;
 
     public SentryDeploymentController(ILogger<SentryDeploymentController> logger, EntityFinalizerAttacher<SentryDeploymentFinalizer, SentryDeployment> finalizer,
         RemoteFileService remoteFileService, ICertificateProvisioner certificateProvisioner, IDefaultConfigProvisioner defaultConfigProvisioner,
-        IManagedResourceCleanup managedResourceCleanup, IComposeSourceResolver composeSourceResolver, DockerComposeConverter dockerComposeConverter, IKubernetesClient client)
+        IManagedResourceCleanup managedResourceCleanup, IComposeSourceResolver composeSourceResolver, DockerComposeConverter dockerComposeConverter,
+        IKubernetesClient client, IHorizontalPodAutoscalerReconciler horizontalPodAutoscalerReconciler)
     {
         _logger = logger;
         _finalizer = finalizer;
@@ -49,6 +52,7 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
         _composeSourceResolver = composeSourceResolver;
         _client = client;
         _dockerComposeConverter = dockerComposeConverter;
+        _horizontalPodAutoscalerReconciler = horizontalPodAutoscalerReconciler;
     }
 
     public async Task ReconcileAsync(SentryDeployment entity, CancellationToken cancellationToken)
@@ -73,12 +77,14 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
         var services = resources.OfType<V1Service>().ToList();
         var deployments = resources.OfType<V1Deployment>().ToList();
         var statefulSets = resources.OfType<V1StatefulSet>().ToList();
+        var horizontalPodAutoscalers = resources.OfType<V2HorizontalPodAutoscaler>().ToList();
 
         var actualServices = await _client.ListAsync<V1Service>(entity.Namespace(), cancellationToken: cancellationToken);
         var actualDeployments = await _client.ListAsync<V1Deployment>(entity.Namespace(), cancellationToken: cancellationToken);
         var actualStatefulSets = await _client.ListAsync<V1StatefulSet>(entity.Namespace(), cancellationToken: cancellationToken);
 
-        if (!CheckIfUpdateIsNeeded(services, actualServices, deployments, actualDeployments, statefulSets, actualStatefulSets, entity))
+        if (!CheckIfUpdateIsNeeded(services, actualServices, deployments, actualDeployments, statefulSets, actualStatefulSets, entity) &&
+            !await _horizontalPodAutoscalerReconciler.NeedsUpdateAsync(horizontalPodAutoscalers, entity, cancellationToken))
         {
             if (entity.Status.Status != "Ready" || string.IsNullOrWhiteSpace(entity.Status.LastVersion))
             {
@@ -121,6 +127,7 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
         await DeployWorkloadResourcesInOrder(
             deployments, statefulSets, actualDeployments, actualStatefulSets, 
             orchestrator, entity, cancellationToken);
+        await _horizontalPodAutoscalerReconciler.ReconcileAsync(horizontalPodAutoscalers, entity, cancellationToken);
 
         foreach (var deployment in actualDeployments)
         {

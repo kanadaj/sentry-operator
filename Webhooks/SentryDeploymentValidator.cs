@@ -41,6 +41,13 @@ public class SentryDeploymentValidator : ValidationWebhook<SentryDeployment>
             {
                 return Fail("Docker compose url must be a valid url.", StatusCodes.Status400BadRequest);
             }
+
+        }
+
+        var autoscalingValidationError = newEntity.Spec.Config?.TaskWorkerAutoscaling?.Validate();
+        if (autoscalingValidationError != null)
+        {
+            return Fail(autoscalingValidationError, StatusCodes.Status400BadRequest);
         }
 
         if (!string.IsNullOrWhiteSpace(newEntity.Spec.DockerComposeOverrides))

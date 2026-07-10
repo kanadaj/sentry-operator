@@ -196,6 +196,30 @@ spec:
                     format: int32
                     nullable: true
                     type: integer
+                  taskWorkerAutoscaling:
+                    description: Optional autoscaling settings for task workers. When omitted, the taskworker replica count remains fixed.
+                    nullable: true
+                    properties:
+                      minReplicas:
+                        description: The minimum number of taskworker replicas
+                        format: int32
+                        type: integer
+                      maxReplicas:
+                        description: The maximum number of taskworker replicas
+                        format: int32
+                        type: integer
+                      cpuTargetUtilization:
+                        description: The target average CPU utilization percentage for taskworkers
+                        format: int32
+                        type: integer
+                      consumerLagTarget:
+                        description: The target average consumer lag per taskworker
+                        format: int32
+                        type: integer
+                      externalMetricName:
+                        description: The external metric name exposed by the cluster external-metrics adapter
+                        type: string
+                    type: object
                 type: object
               replicas:
                 additionalProperties:

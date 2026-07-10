@@ -22,6 +22,13 @@ public class ManagedResourceCleanup : IManagedResourceCleanup
         await _client.DeleteAsync(deployment, CancellationToken.None);
     }
 
+    var horizontalPodAutoscalers = await _client.ListAsync<V2HorizontalPodAutoscaler>(entity.Namespace(),
+        labelSelector: "app.kubernetes.io/managed-by=sentry-operator", cancellationToken: cancellationToken);
+    foreach (var horizontalPodAutoscaler in horizontalPodAutoscalers)
+    {
+        await _client.DeleteAsync(horizontalPodAutoscaler, CancellationToken.None);
+    }
+
     var services = await _client.ListAsync<V1Service>(entity.Namespace(), labelSelector: $"app.kubernetes.io/managed-by=sentry-operator", CancellationToken.None);
     foreach (var service in services)
     {

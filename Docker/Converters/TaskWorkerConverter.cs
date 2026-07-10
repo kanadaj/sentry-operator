@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using k8s;
 using k8s.Models;
 using SentryOperator.Docker.Compose;
 using SentryOperator.Entities;
@@ -9,6 +10,34 @@ public class TaskWorkerConverter : SentryContainerConverter
 {
     public override int Priority => 1;
     public override bool CanConvert(string name, DockerService service) => name == "taskworker";
+
+    public override IEnumerable<IKubernetesObject<V1ObjectMeta>> Convert(string name, DockerService service,
+        SentryDeployment sentryDeployment)
+    {
+        foreach (var resource in base.Convert(name, service, sentryDeployment))
+        {
+            yield return resource;
+        }
+
+        var autoscaling = sentryDeployment.Spec.Config?.TaskWorkerAutoscaling;
+        if (autoscaling != null)
+        {
+            yield return CreateHorizontalPodAutoscaler(name, sentryDeployment, autoscaling);
+        }
+    }
+
+    protected override IKubernetesObject<V1ObjectMeta> CreateDeployment(string name, DockerService service,
+        SentryDeployment sentryDeployment)
+    {
+        var deployment = (V1Deployment)base.CreateDeployment(name, service, sentryDeployment);
+        var autoscaling = sentryDeployment.Spec.Config?.TaskWorkerAutoscaling;
+        if (autoscaling != null)
+        {
+            deployment.Spec.Replicas = autoscaling.MinReplicas;
+        }
+
+        return deployment;
+    }
 
     protected override V1Container GetBaseContainer(string name, DockerService service, SentryDeployment sentryDeployment)
     {
@@ -46,5 +75,67 @@ public class TaskWorkerConverter : SentryContainerConverter
         container.Args[0] = string.Join(" ", args);
 
         return container;
+    }
+
+    private static V2HorizontalPodAutoscaler CreateHorizontalPodAutoscaler(string name,
+        SentryDeployment sentryDeployment, TaskWorkerAutoscaling autoscaling)
+    {
+        return new V2HorizontalPodAutoscaler
+        {
+            ApiVersion = "autoscaling/v2",
+            Kind = "HorizontalPodAutoscaler",
+            Metadata = new V1ObjectMeta
+            {
+                Name = $"{name}-autoscaler",
+                NamespaceProperty = sentryDeployment.Namespace(),
+                Labels = new Dictionary<string, string>
+                {
+                    { "app.kubernetes.io/name", name },
+                    { "app.kubernetes.io/instance", name },
+                    { "app.kubernetes.io/version", sentryDeployment.Spec.GetVersion() },
+                    { "app.kubernetes.io/managed-by", "sentry-operator" },
+                }
+            },
+            Spec = new V2HorizontalPodAutoscalerSpec
+            {
+                MinReplicas = autoscaling.MinReplicas,
+                MaxReplicas = autoscaling.MaxReplicas,
+                ScaleTargetRef = new V2CrossVersionObjectReference
+                {
+                    ApiVersion = "apps/v1",
+                    Kind = "Deployment",
+                    Name = name,
+                },
+                Metrics =
+                [
+                    new V2MetricSpec
+                    {
+                        Type = "Resource",
+                        Resource = new V2ResourceMetricSource
+                        {
+                            Name = "cpu",
+                            Target = new V2MetricTarget
+                            {
+                                Type = "Utilization",
+                                AverageUtilization = autoscaling.CpuTargetUtilization,
+                            }
+                        }
+                    },
+                    new V2MetricSpec
+                    {
+                        Type = "External",
+                        External = new V2ExternalMetricSource
+                        {
+                            Metric = new V2MetricIdentifier { Name = autoscaling.ExternalMetricName },
+                            Target = new V2MetricTarget
+                            {
+                                Type = "AverageValue",
+                                AverageValue = new ResourceQuantity(autoscaling.ConsumerLagTarget.ToString()),
+                            }
+                        }
+                    }
+                ]
+            }
+        };
     }
 }

@@ -85,6 +85,9 @@ public class SentryDeploymentConfig
     [Description("The concurrency for task workers")]
     public int? TaskWorkerConcurrency { get; set; } = 4;
 
+    [Description("Optional autoscaling settings for task workers. When omitted, the taskworker replica count remains fixed.")]
+    public TaskWorkerAutoscaling? TaskWorkerAutoscaling { get; set; }
+
     public string ReplaceVariables(string yaml, string version)
     {
         var replacements = new Dictionary<string, string>
@@ -121,5 +124,52 @@ public class SentryDeploymentConfig
         }
 
         return Regex.Replace(result.ToString(), "\\${(.+?)(?::-(.*?))?}", match => replacements.TryGetValue(match.Groups[1].Value, out var v) ? v : match.Groups[2].Success ? match.Groups[2].Value : match.Groups[1].Value);
+    }
+}
+
+public class TaskWorkerAutoscaling
+{
+    public const string DefaultExternalMetricName = "sentry_taskworker_consumer_lag";
+
+    [Description("The minimum number of taskworker replicas")]
+    public int MinReplicas { get; set; } = 1;
+
+    [Description("The maximum number of taskworker replicas")]
+    public int MaxReplicas { get; set; } = 10;
+
+    [Description("The target average CPU utilization percentage for taskworkers")]
+    public int CpuTargetUtilization { get; set; } = 80;
+
+    [Description("The target average consumer lag per taskworker")]
+    public int ConsumerLagTarget { get; set; } = 100;
+
+    [Description("The external metric name exposed by the cluster external-metrics adapter")]
+    public string ExternalMetricName { get; set; } = DefaultExternalMetricName;
+
+    public string? Validate()
+    {
+        if (MinReplicas < 1)
+        {
+            return "Task worker autoscaling minimum replicas must be at least 1.";
+        }
+
+        if (MaxReplicas < MinReplicas)
+        {
+            return "Task worker autoscaling maximum replicas must be greater than or equal to minimum replicas.";
+        }
+
+        if (CpuTargetUtilization is < 1 or > 100)
+        {
+            return "Task worker autoscaling CPU target utilization must be between 1 and 100.";
+        }
+
+        if (ConsumerLagTarget <= 0)
+        {
+            return "Task worker autoscaling consumer lag target must be greater than 0.";
+        }
+
+        return string.IsNullOrWhiteSpace(ExternalMetricName)
+            ? "Task worker autoscaling external metric name must not be empty."
+            : null;
     }
 }

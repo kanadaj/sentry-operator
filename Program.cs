@@ -25,6 +25,7 @@ builder.Services.AddTransient<IComposeSourceResolver, ComposeSourceResolver>();
 builder.Services.AddTransient<ICertificateProvisioner, CertificateProvisioner>();
 builder.Services.AddTransient<IDefaultConfigProvisioner, DefaultConfigProvisioner>();
 builder.Services.AddTransient<IManagedResourceCleanup, ManagedResourceCleanup>();
+builder.Services.AddTransient<IHorizontalPodAutoscalerReconciler, HorizontalPodAutoscalerReconciler>();
 
 // Find all non-abstract IDockerContainerConverter implementations and register them.
 foreach (var converter in typeof(Program).Assembly.GetTypes()

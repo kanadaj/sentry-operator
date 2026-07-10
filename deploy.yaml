@@ -74,6 +74,17 @@ rules:
       - update
       - delete
   - apiGroups:
+      - autoscaling
+    resources:
+      - horizontalpodautoscalers
+    verbs:
+      - create
+      - get
+      - list
+      - patch
+      - update
+      - delete
+  - apiGroups:
       - ""
     resources:
       - events
@@ -113,6 +124,14 @@ rules:
       - apps
     resources:
       - deployments/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - autoscaling
+    resources:
+      - horizontalpodautoscalers/status
     verbs:
       - get
       - patch

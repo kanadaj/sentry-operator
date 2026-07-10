@@ -48,6 +48,13 @@ spec:
       limits:
         cpu: 200m
         memory: 1Gi
+  taskWorkerAutoscaling:
+    minReplicas: 2
+    maxReplicas: 8
+    cpuTargetUtilization: 80
+    consumerLagTarget: 100
+    # Must be exposed by the cluster external-metrics adapter.
+    externalMetricName: sentry_taskworker_consumer_lag
   replicas:
     relay: 2
     web: 2
