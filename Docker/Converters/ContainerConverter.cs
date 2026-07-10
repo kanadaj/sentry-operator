@@ -44,7 +44,16 @@ public abstract class ContainerConverter : IDockerContainerConverter
         var commandString = string.Join(" ", commandArray);
         var testCommands = service.Healthcheck?.Test is string testString
             ? testString.Split(" ")
-            : (service.Healthcheck?.Test as IEnumerable<object>)?.SelectMany(x => x.ToString()?.Split(" ") ?? [])
+            : (service.Healthcheck?.Test as IEnumerable<object>)?.SelectMany(x =>
+            {
+                var line = x.ToString();
+                if (line == null) return [];
+                if (line.Contains("\n"))
+                {
+                    return [line];
+                }
+                return line.Split(" ");
+            })
             .Where(x => x != "CMD" && x != "CMD-SHELL").ToArray();
 
         int totalRetries = 0;
