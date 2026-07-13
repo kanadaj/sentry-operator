@@ -168,7 +168,7 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
         return;
     }
 
-    private async Task DeployWorkloadResourcesInOrder(
+    private async Task DeployWorkloadResourcesInDependencyWaves(
         List<V1Deployment> deployments,
         List<V1StatefulSet> statefulSets,
         IList<V1Deployment> actualDeployments,
@@ -184,40 +184,41 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
             allWorkloads[s.Name()] = s;
 
         var deploymentOrder = orchestrator.CalculateDeploymentOrder();
-        var deployed = new HashSet<string>();
+        var remainingWorkloads = deploymentOrder
+            .Where(allWorkloads.ContainsKey)
+            .ToHashSet(StringComparer.Ordinal);
 
-        foreach (var serviceName in deploymentOrder)
+        while (remainingWorkloads.Count > 0)
         {
-            if (!allWorkloads.ContainsKey(serviceName))
-                continue;
+            var readyWorkloads = deploymentOrder
+                .Where(remainingWorkloads.Contains)
+                .Where(serviceName => orchestrator.AreDependenciesSatisfied(serviceName, actualDeployments, actualStatefulSets))
+                .ToArray();
 
-            var workload = allWorkloads[serviceName];
-
-            // Wait for dependencies to be ready before deploying
-            while (!orchestrator.AreDependenciesSatisfied(serviceName, actualDeployments, actualStatefulSets))
+            if (readyWorkloads.Length == 0)
             {
-                _logger.LogInformation("Waiting for dependencies of {ServiceName} to be ready", serviceName);
+                _logger.LogInformation("Waiting for remaining workload dependencies to be ready");
                 await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
-                
-                // Refresh deployment status
                 actualDeployments = await _client.ListAsync<V1Deployment>(entity.Namespace(), cancellationToken: cancellationToken);
                 actualStatefulSets = await _client.ListAsync<V1StatefulSet>(entity.Namespace(), cancellationToken: cancellationToken);
+                continue;
             }
 
-            _logger.LogInformation("Deploying {ServiceName} with dependencies satisfied", serviceName);
+            var deploymentTasks = readyWorkloads.Select(serviceName =>
+            {
+                _logger.LogInformation("Deploying {ServiceName} with dependencies satisfied", serviceName);
+                return allWorkloads[serviceName] switch
+                {
+                    V1Deployment deployment => DeployWorkload(deployment, actualDeployments, entity, cancellationToken),
+                    V1StatefulSet statefulSet => DeployStatefulSet(statefulSet, actualStatefulSets, entity, cancellationToken),
+                    _ => throw new InvalidOperationException($"Unsupported workload type for service '{serviceName}'."),
+                };
+            });
 
-            if (workload is V1Deployment deployment)
-            {
-                await DeployWorkload(deployment, actualDeployments, entity, cancellationToken);
-                deployed.Add(serviceName);
-                actualDeployments = await _client.ListAsync<V1Deployment>(entity.Namespace(), cancellationToken: cancellationToken);
-            }
-            else if (workload is V1StatefulSet statefulSet)
-            {
-                await DeployStatefulSet(statefulSet, actualStatefulSets, entity, cancellationToken);
-                deployed.Add(serviceName);
-                actualStatefulSets = await _client.ListAsync<V1StatefulSet>(entity.Namespace(), cancellationToken: cancellationToken);
-            }
+            await Task.WhenAll(deploymentTasks);
+            remainingWorkloads.ExceptWith(readyWorkloads);
+            actualDeployments = await _client.ListAsync<V1Deployment>(entity.Namespace(), cancellationToken: cancellationToken);
+            actualStatefulSets = await _client.ListAsync<V1StatefulSet>(entity.Namespace(), cancellationToken: cancellationToken);
         }
     }
 
