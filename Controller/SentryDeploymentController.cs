@@ -109,7 +109,7 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
             var svc = actualServices.FirstOrDefault(s => s.Name() == service.Name());
             if (svc == null)
             {
-                service.AddOwnerReference(entity.MakeOwnerReference());
+                EnsureOwnerReference(service, entity);
                 await _client.CreateAsync(service, CancellationToken.None);
             }
             else if (svc.GetLabel("app.kubernetes.io/managed-by") == "sentry-operator")
@@ -117,14 +117,14 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
                 if (svc.GetLabel("sentry-operator/checksum") != checksum)
                 {
                     service.Metadata.ResourceVersion = svc.Metadata.ResourceVersion;
-                    service.AddOwnerReference(entity.MakeOwnerReference());
+                    EnsureOwnerReference(service, entity);
                     await _client.UpdateAsync(service, CancellationToken.None);
                 }
             }
         }
 
-        // Deploy deployments and statefulsets in dependency order with health checks
-        await DeployWorkloadResourcesInOrder(
+        // Deploy deployments and statefulsets in dependency-safe parallel waves.
+        await DeployWorkloadResourcesInDependencyWaves(
             deployments, statefulSets, actualDeployments, actualStatefulSets, 
             orchestrator, entity, cancellationToken);
         await _horizontalPodAutoscalerReconciler.ReconcileAsync(horizontalPodAutoscalers, entity, cancellationToken);
@@ -233,7 +233,7 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
 
         if (actualDeployment == null)
         {
-            deployment.AddOwnerReference(entity.MakeOwnerReference());
+            EnsureOwnerReference(deployment, entity);
             await _client.CreateAsync(deployment, CancellationToken.None);
             _logger.LogInformation("Created deployment {DeploymentName}", deployment.Name());
         }
@@ -246,7 +246,7 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
             {
                 _logger.LogInformation("Updating deployment {DeploymentName}", deployment.Name());
                 deployment.Metadata.ResourceVersion = actualDeployment.Metadata.ResourceVersion;
-                deployment.AddOwnerReference(entity.MakeOwnerReference());
+                EnsureOwnerReference(deployment, entity);
                 await _client.UpdateAsync(deployment, CancellationToken.None);
             }
         }
@@ -264,7 +264,7 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
 
         if (actualStatefulSet == null)
         {
-            statefulSet.AddOwnerReference(entity.MakeOwnerReference());
+            EnsureOwnerReference(statefulSet, entity);
             await _client.CreateAsync(statefulSet, CancellationToken.None);
             _logger.LogInformation("Created statefulset {StatefulSetName}", statefulSet.Name());
         }
@@ -277,7 +277,7 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
             {
                 _logger.LogInformation("Updating statefulset {StatefulSetName}", statefulSet.Name());
                 statefulSet.Metadata.ResourceVersion = actualStatefulSet.Metadata.ResourceVersion;
-                statefulSet.AddOwnerReference(entity.MakeOwnerReference());
+                EnsureOwnerReference(statefulSet, entity);
                 try
                 {
                     await _client.UpdateAsync(statefulSet, CancellationToken.None);
@@ -288,7 +288,7 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
                     _logger.LogError(e, "Error updating statefulset {StatefulSetName}, deleting and recreating it", statefulSet.Name());
                     await _client.DeleteAsync(actualStatefulSet, CancellationToken.None);
                     await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
-                    statefulSet.AddOwnerReference(entity.MakeOwnerReference());
+                    EnsureOwnerReference(statefulSet, entity);
                     await _client.CreateAsync(statefulSet, CancellationToken.None);
                 }
             }
@@ -305,7 +305,7 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
     {
         foreach (var service in services)
         {
-            service.AddOwnerReference(entity.MakeOwnerReference());
+            EnsureOwnerReference(service, entity);
 
             var matchingService = actualServices.FirstOrDefault(s => s.Name() == service.Name());
             if (matchingService == null)
@@ -329,7 +329,7 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
 
         foreach (var deployment in deployments)
         {
-            deployment.AddOwnerReference(entity.MakeOwnerReference());
+            EnsureOwnerReference(deployment, entity);
 
             var matchingDeployment = actualDeployments.FirstOrDefault(d => d.Name() == deployment.Name());
 
@@ -352,7 +352,7 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
 
         foreach (var statefulSet in statefulSets)
         {
-            statefulSet.AddOwnerReference(entity.MakeOwnerReference());
+            EnsureOwnerReference(statefulSet, entity);
             
             var matchingStatefulSet = actualStatefulSets.FirstOrDefault(s => s.Name() == statefulSet.Name());
             if (matchingStatefulSet == null) return true;
@@ -460,6 +460,22 @@ public class SentryDeploymentController : IEntityController<SentryDeployment>
     {
         var dockerComposeRaw = await _composeSourceResolver.GetComposeAsync(entity, cancellationToken);
         return _dockerComposeConverter.ConvertWithOrchestrator(dockerComposeRaw, entity);
+    }
+
+    private static void EnsureOwnerReference(
+        IKubernetesObject<V1ObjectMeta> resource,
+        SentryDeployment entity)
+    {
+        resource.Metadata ??= new V1ObjectMeta();
+        resource.Metadata.OwnerReferences ??= new List<V1OwnerReference>();
+        if (resource.Metadata.OwnerReferences.Any(ownerReference =>
+                ownerReference.Uid == entity.Metadata.Uid &&
+                ownerReference.Name == entity.Name()))
+        {
+            return;
+        }
+
+        resource.AddOwnerReference(entity.MakeOwnerReference());
     }
 }
 
