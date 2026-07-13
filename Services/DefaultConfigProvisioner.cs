@@ -14,6 +14,7 @@ namespace SentryOperator.Services;
 
 public class DefaultConfigProvisioner : IDefaultConfigProvisioner
 {
+    private const string ChecksumLabel = "sentry-operator/checksum";
     private readonly IKubernetesClient _client;
     private readonly ILogger<DefaultConfigProvisioner> _logger;
     private readonly RemoteFileService _remoteFileService;
@@ -89,43 +90,17 @@ public async Task EnsureAsync(SentryDeployment entity)
     if (configMap == null)
     {
         var (cachedConfigTemplate, secretKey) = await GenerateSentryConfig(entity);
-
-        configMap = new V1Secret
-        {
-            Metadata = new V1ObjectMeta
-            {
-                Name = "sentry-config",
-                NamespaceProperty = entity.Namespace()
-            },
-            StringData = new Dictionary<string, string>
-            {
-                ["secretkey"] = secretKey,
-                ["config.yml"] = cachedConfigTemplate.Config,
-                ["entrypoint.sh"] = cachedConfigTemplate.Entrypoint,
-                ["sentry.conf.py"] = cachedConfigTemplate.SentryConfPy,
-                ["requirements.txt"] = string.Join("\n", entity.Spec.Config?.AdditionalPythonPackages ?? [])
-            }
-        };
-
-        configMap.AddOwnerReference(entity.MakeOwnerReference());
-
+        configMap = CreateManagedSentryConfigSecret(entity, cachedConfigTemplate, secretKey);
         await _client.CreateAsync(configMap);
     }
     else if (configMap.IsOwnedBy(entity))
     {
         var (cachedConfigTemplate, secretKey) = await GenerateSentryConfig(entity, configMap.StringData["secretkey"]);
-
-        configMap.StringData["secretkey"] = secretKey;
-        configMap.StringData["config.yml"] = cachedConfigTemplate.Config;
-        configMap.StringData["entrypoint.sh"] = cachedConfigTemplate.Entrypoint;
-        configMap.StringData["sentry.conf.py"] = cachedConfigTemplate.SentryConfPy;
-        configMap.StringData["requirements.txt"] = string.Join("\n", entity.Spec.Config?.AdditionalPythonPackages ?? []);
-
-        var hash = configMap.GetChecksum();
-        if (hash != configMap.GetLabel("sentry-operator/checksum"))
+        var desiredConfigMap = CreateManagedSentryConfigSecret(entity, cachedConfigTemplate, secretKey);
+        if (desiredConfigMap.GetLabel(ChecksumLabel) != configMap.GetLabel(ChecksumLabel))
         {
-            configMap.SetLabel("sentry-operator/checksum", hash);
-            await _client.UpdateAsync(configMap);
+            desiredConfigMap.Metadata.ResourceVersion = configMap.Metadata.ResourceVersion;
+            await _client.UpdateAsync(desiredConfigMap);
         }
     }
 
@@ -306,6 +281,33 @@ private async Task<(ConfigTemplate cachedConfigTemplate, string secretKey)> Gene
     }
 
     return (cachedConfigTemplate, secretKey);
+}
+
+private static V1Secret CreateManagedSentryConfigSecret(
+    SentryDeployment entity,
+    ConfigTemplate cachedConfigTemplate,
+    string secretKey)
+{
+    var secret = new V1Secret
+    {
+        Metadata = new V1ObjectMeta
+        {
+            Name = "sentry-config",
+            NamespaceProperty = entity.Namespace(),
+        },
+        StringData = new Dictionary<string, string>
+        {
+            ["secretkey"] = secretKey,
+            ["config.yml"] = cachedConfigTemplate.Config,
+            ["entrypoint.sh"] = cachedConfigTemplate.Entrypoint,
+            ["sentry.conf.py"] = cachedConfigTemplate.SentryConfPy,
+            ["requirements.txt"] = string.Join("\n", entity.Spec.Config?.AdditionalPythonPackages ?? []),
+        },
+    };
+
+    secret.AddOwnerReference(entity.MakeOwnerReference());
+    secret.SetLabel(ChecksumLabel, secret.GetChecksum());
+    return secret;
 }
 
 public static string GenerateRedisConfig(RedisConfig[] redisConfig)
