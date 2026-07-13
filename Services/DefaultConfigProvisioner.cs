@@ -374,20 +374,30 @@ private async Task<V1ConfigMap> InitAndGetRelayConfigMap(SentryDeployment entity
         await _client.CreateAsync(relayConfigMap);
     }
 
-    _ = Task.Run(() => WaitForRelayAndGenerateCredentials(entity));
+    relayConfigMap.Data ??= new Dictionary<string, string>();
+    if (!relayConfigMap.Data.TryGetValue("credentials.json", out var relayCredentials) ||
+        string.IsNullOrWhiteSpace(relayCredentials))
+    {
+        _ = Task.Run(() => WaitForRelayAndGenerateCredentials(entity));
+    }
 
     return relayConfigMap;
 }
 
 private async Task WaitForRelayAndGenerateCredentials(SentryDeployment entity)
 {
-    var pods = await _client.ListAsync<V1Pod>(entity.Namespace(), labelSelector: $"app.kubernetes.io/managed-by=sentry-operator,app.kubernetes.io/name=relay");
-    var pod = pods.First();
-    while (pod.Status.Phase != "Running")
+    V1Pod? pod = null;
+    while (pod?.Status?.Phase != "Running")
     {
+        var pods = await _client.ListAsync<V1Pod>(entity.Namespace(),
+            labelSelector: $"app.kubernetes.io/managed-by=sentry-operator,app.kubernetes.io/name=relay");
+        pod = pods.FirstOrDefault();
+        if (pod?.Status?.Phase == "Running")
+        {
+            break;
+        }
+
         await Task.Delay(TimeSpan.FromSeconds(5));
-        pods = await _client.ListAsync<V1Pod>(entity.Namespace(), labelSelector: $"app.kubernetes.io/managed-by=sentry-operator,app.kubernetes.io/name=relay");
-        pod = pods.First();
     }
 
     await GenerateRelayCredentials(entity);
@@ -426,6 +436,13 @@ public async Task GenerateRelayCredentials(SentryDeployment entity)
                 entity.Status.Message = error;
                 await _client.UpdateStatusAsync(entity, CancellationToken.None);
 
+                return;
+            }
+
+            configMap.Data ??= new Dictionary<string, string>();
+            if (configMap.Data.TryGetValue("credentials.json", out var existingCredentials) &&
+                existingCredentials == credentials)
+            {
                 return;
             }
 
